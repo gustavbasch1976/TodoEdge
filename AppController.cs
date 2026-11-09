@@ -125,7 +125,7 @@ namespace TodoEdge
         public async Task FromSpokenOrTypedTextAsync(string text, bool dictated)
         {
             if (_busy || !EnsureKey()) return;
-            await ProcessAsync(null, text, dictated);
+            await ProcessAsync(new CaptureInput { Kind = dictated ? "dictation" : "text", Text = text });
         }
 
         public void HidePanel()
@@ -160,105 +160,87 @@ namespace TodoEdge
             if (area == null) return;
             await Task.Delay(180); // let the overlay disappear from the screen
             byte[] png = ScreenCapture.Grab(area.Value);
-            await ProcessAsync(png, null);
+            await ProcessAsync(new CaptureInput { Kind = "screenshot", Png = png });
         }
 
         public async Task FromClipboardAsync()
         {
             if (_busy || !EnsureKey()) return;
+            CaptureInput? input = null;
             try
             {
                 if (WF.Clipboard.ContainsImage())
                 {
                     using var img = WF.Clipboard.GetImage();
-                    if (img != null) { await ProcessAsync(ImageUtil.ToPng(img), null); return; }
+                    if (img != null) input = new CaptureInput { Kind = "image", Png = ImageUtil.ToPng(img) };
                 }
-                if (WF.Clipboard.ContainsFileDropList())
+                if (input == null && WF.Clipboard.ContainsFileDropList())
                 {
                     foreach (string? f in WF.Clipboard.GetFileDropList())
                     {
                         if (f == null) continue;
-                        if (await TryProcessFileAsync(f)) return;
+                        input = InputReader.FromFile(f);
+                        if (input != null) break;
                     }
                 }
-                if (WF.Clipboard.ContainsText())
+                if (input == null && WF.Clipboard.ContainsText())
                 {
                     string text = WF.Clipboard.GetText();
-                    if (!string.IsNullOrWhiteSpace(text)) { await ProcessAsync(null, text); return; }
+                    if (!string.IsNullOrWhiteSpace(text)) input = new CaptureInput { Kind = "text", Text = text };
                 }
-                Balloon("Clipboard is empty", "Copy some text or an image first, then press Ctrl+Shift+Y.");
             }
             catch (Exception ex)
             {
                 ShowError("Could not read the clipboard: " + ex.Message);
+                return;
             }
+
+            if (input == null)
+            {
+                Balloon("Clipboard is empty", "Copy some text, an image or a file first, then press Ctrl+Shift+Y.");
+                return;
+            }
+            await ProcessAsync(input);
         }
 
+        /// <summary>Handles anything dropped on the icon or the note. Reads the data straight away, while the drag is live.</summary>
         public async Task FromDataAsync(IDataObject data)
         {
-            if (_busy || !EnsureKey()) return;
+            if (_busy) return;
+            CaptureInput? input;
             try
             {
-                if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] files)
-                {
-                    foreach (string f in files)
-                        if (await TryProcessFileAsync(f)) return;
-                }
-                if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is System.Windows.Media.Imaging.BitmapSource bmp)
-                {
-                    var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-                    encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
-                    using var ms = new MemoryStream();
-                    encoder.Save(ms);
-                    await ProcessAsync(ms.ToArray(), null);
-                    return;
-                }
-                if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text
-                    && !string.IsNullOrWhiteSpace(text))
-                {
-                    await ProcessAsync(null, text);
-                    return;
-                }
-                Balloon("Nothing to read", "Drop an image, a screenshot file or some selected text onto the icon.");
+                input = InputReader.FromData(data);
             }
             catch (Exception ex)
             {
-                ShowError("Could not read what was dropped: " + ex.Message);
+                ShowError(ex.Message);
+                return;
             }
-        }
 
-        private async Task<bool> TryProcessFileAsync(string path)
-        {
-            if (!File.Exists(path)) return false;
-            if (ImageUtil.IsImageFile(path))
+            if (input == null)
             {
-                await ProcessAsync(ImageUtil.FileToPng(path), null);
-                return true;
+                Balloon("Can't read that", "Drop " + InputReader.SupportedList + ".");
+                return;
             }
-            if (ImageUtil.IsTextFile(path))
-            {
-                await ProcessAsync(null, File.ReadAllText(path));
-                return true;
-            }
-            return false;
+            if (!EnsureKey()) return;
+            await ProcessAsync(input);
         }
 
         // ---------- the Claude round trip ----------
 
-        private async Task ProcessAsync(byte[]? png, string? text, bool dictated = false)
+        private async Task ProcessAsync(CaptureInput input)
         {
             if (_busy) return;
             string? key = GetApiKey();
             if (string.IsNullOrEmpty(key)) return;
 
-            if (text != null && text.Length > 30000) text = text.Substring(0, 30000);
-
-            SetBusy(true, png != null ? "Claude is reading your screenshot..." : "Claude is reading your text...");
+            SetBusy(true, input.BusyMessage);
             List<ProposedTask> tasks;
             try
             {
-                byte[]? upload = png != null ? ImageUtil.PrepareForApi(png) : null;
-                tasks = await ClaudeService.ExtractAsync(key, Settings.Model, upload, text, dictated);
+                if (input.Png != null) input.Png = ImageUtil.PrepareForApi(input.Png);
+                tasks = await ClaudeService.ExtractAsync(key, Settings.Model, input, Settings.MyName);
             }
             catch (Exception ex)
             {
@@ -268,7 +250,10 @@ namespace TodoEdge
             }
             SetBusy(false, "");
 
-            if (tasks.Count == 0 && png == null && dictated && text != null)
+            string? text = input.Text;
+            string? shortText = text != null && text.Length > 4000 ? text.Substring(0, 4000) : text;
+
+            if (tasks.Count == 0 && input.Kind == "dictation" && text != null)
             {
                 Store.Add(new TodoItem { Title = text.Length > 200 ? text.Substring(0, 200) : text });
                 ShowPanel();
@@ -281,22 +266,26 @@ namespace TodoEdge
             }
 
             // A single item from your own words goes straight in; anything else gets a quick review.
-            if (png == null && tasks.Count == 1)
+            if (input.Kind == "dictation" && tasks.Count == 1)
             {
                 var t = tasks[0];
-                Store.Add(new TodoItem { Title = t.Title, Due = t.Due, Person = t.Person, Notes = t.Notes, SourceText = text });
+                Store.Add(new TodoItem { Title = t.Title, Due = t.Due, Person = t.Person, Notes = t.Notes, SourceText = shortText });
                 ShowPanel();
                 return;
             }
 
-            var review = new ReviewWindow(tasks, png, Settings.Tags);
+            var review = new ReviewWindow(tasks, input.Png, Settings.Tags, input.SourceName);
             if (review.ShowDialog() != true || review.Selected.Count == 0) return;
 
-            string? imageName = null;
-            if (png != null)
+            // Keep the original (screenshot, email, PDF...) so "Show source" can open it.
+            string? sourceFile = null;
+            byte[]? keep = input.OriginalBytes ?? input.Png;
+            if (keep != null)
             {
-                imageName = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 6) + ".png";
-                File.WriteAllBytes(Path.Combine(Paths.Sources, imageName), png);
+                string ext = input.OriginalBytes != null ? (input.OriginalExtension ?? ".bin") : ".png";
+                string stem = input.SourceName != null ? SafeName(Path.GetFileNameWithoutExtension(input.SourceName)) : "capture";
+                sourceFile = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + stem + ext;
+                File.WriteAllBytes(Path.Combine(Paths.Sources, sourceFile), keep);
             }
 
             foreach (var r in review.Selected)
@@ -308,12 +297,18 @@ namespace TodoEdge
                     Person = r.Person,
                     Notes = r.Notes,
                     Tag = r.Tag == ReviewItem.NoTag ? null : r.Tag,
-                    SourceImage = imageName,
-                    SourceText = text != null && text.Length > 4000 ? text.Substring(0, 4000) : text
+                    SourceImage = sourceFile,
+                    SourceText = sourceFile == null ? shortText : null
                 });
             }
             Store.Save();
             ShowPanel();
+        }
+
+        private static string SafeName(string name)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+            return name.Length > 50 ? name.Substring(0, 50) : name;
         }
 
         private void SetBusy(bool busy, string message)

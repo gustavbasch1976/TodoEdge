@@ -123,7 +123,9 @@ namespace TodoEdge
             };
             _root.DragEnter += (s, e) => Expand();
             _root.DragLeave += (s, e) => _collapseTimer.Start();
-            _root.Drop += (s, e) => { _ = _c.FromDataAsync(e.Data); };
+            // Always ask for Copy, so Outlook never treats a drop as a move.
+            _root.DragOver += (s, e) => { e.Effects = DragDropEffects.Copy; e.Handled = true; };
+            _root.Drop += (s, e) => { e.Effects = DragDropEffects.Copy; _ = _c.FromDataAsync(e.Data); };
 
             _bubble.MouseLeftButtonDown += OnDown;
             _bubble.MouseMove += OnMove;

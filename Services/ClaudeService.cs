@@ -23,12 +23,15 @@ namespace TodoEdge
         private const string Endpoint = "https://api.anthropic.com/v1/messages";
         private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
 
-        private static string SystemPrompt()
+        private static string SystemPrompt(string? myName)
         {
             string today = DateTime.Today.ToString("dddd dd MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"));
+            string who = string.IsNullOrWhiteSpace(myName)
+                ? ""
+                : $"\nThe reader is {myName.Trim()}. Treat that name, first name or initials as \"me\" when spotting their actions.";
             return
 $@"You turn screenshots and text (emails, WhatsApp or Teams chats, documents, notes) into to-do items for the person who is reading them.
-Today is {today}. The reader is the recipient of messages unless the content clearly shows otherwise.
+Today is {today}. The reader is the recipient of messages unless the content clearly shows otherwise.{who}
 
 Rules:
 - Only include actions the reader needs to do or follow up. Ignore things other people have promised to do, adverts, signatures and disclaimers.
@@ -43,32 +46,50 @@ Respond with JSON only, no other text, in exactly this shape:
 {{""tasks"":[{{""title"":""..."",""due"":""yyyy-MM-dd or null"",""person"":""... or null"",""notes"":""... or null""}}]}}";
         }
 
-        public static async Task<List<ProposedTask>> ExtractAsync(string apiKey, string model, byte[]? png, string? text, bool dictated = false)
+        public static async Task<List<ProposedTask>> ExtractAsync(string apiKey, string model, CaptureInput input, string? myName)
         {
             var content = new List<object>();
-            if (png != null)
+            string source = input.SourceName != null ? $" (\"{input.SourceName}\")" : "";
+            const string minutesRule =
+                " If it is meeting minutes or an action list, include actions owned by me and actions with no owner. " +
+                "Include actions owned by others only if I clearly need to chase or approve them, and put the owner in person.";
+
+            if (input.Png != null)
             {
                 content.Add(new
                 {
                     type = "image",
-                    source = new { type = "base64", media_type = "image/png", data = Convert.ToBase64String(png) }
+                    source = new { type = "base64", media_type = "image/png", data = Convert.ToBase64String(input.Png) }
                 });
-                content.Add(new { type = "text", text = "Extract my to-do items from this screenshot." });
+                content.Add(new { type = "text", text = "Extract my to-do items from this " + (input.Kind == "screenshot" ? "screenshot." : "image" + source + ".") + minutesRule });
+            }
+            else if (input.Pdf != null)
+            {
+                content.Add(new
+                {
+                    type = "document",
+                    source = new { type = "base64", media_type = "application/pdf", data = Convert.ToBase64String(input.Pdf) }
+                });
+                content.Add(new { type = "text", text = "Extract my to-do items from this PDF" + source + "." + minutesRule });
             }
             else
             {
-                string intro = dictated
-                    ? "This is my own note, dictated with speech-to-text, so it may contain recognition errors and filler words. " +
-                      "I am the person doing these tasks. Fix obvious misheard words and turn it into my to-do items:\n\n"
-                    : "Extract my to-do items from this text:\n\n";
-                content.Add(new { type = "text", text = intro + text });
+                string intro = input.Kind switch
+                {
+                    "dictation" => "This is my own note, dictated with speech-to-text, so it may contain recognition errors and filler words. " +
+                                   "I am the person doing these tasks. Fix obvious misheard words and turn it into my to-do items:\n\n",
+                    "email" => "Extract my to-do items from this email" + source + ". I am the recipient unless it clearly shows otherwise:\n\n",
+                    "document" => "Extract my to-do items from this document" + source + "." + minutesRule + "\n\n",
+                    _ => "Extract my to-do items from this text:\n\n"
+                };
+                content.Add(new { type = "text", text = intro + input.Text });
             }
 
             var body = new
             {
                 model,
                 max_tokens = 1500,
-                system = SystemPrompt(),
+                system = SystemPrompt(myName),
                 messages = new[] { new { role = "user", content } }
             };
 

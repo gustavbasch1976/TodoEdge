@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="icon.ico" LogicalName="icon.ico" />
+    <PackageReference Include="MsgReader" Version="*" />
   </ItemGroup>
 
 </Project>

@@ -25,6 +25,11 @@
     <TextBlock Margin="0,4,0,0" Foreground="#6B7280" FontSize="12" TextWrapping="Wrap"
                Text="Haiku is fastest and cheapest. Sonnet reads messy or long screenshots more accurately."/>
 
+    <TextBlock Text="Your name and initials" Margin="0,14,0,4" FontWeight="SemiBold"/>
+    <TextBox x:Name="NameBox" Padding="4,4"/>
+    <TextBlock Margin="0,4,0,0" Foreground="#6B7280" FontSize="12" TextWrapping="Wrap"
+               Text="Helps Claude pick out your actions in meeting minutes, e.g. Gustav Basch (GB)."/>
+
     <TextBlock Text="Tags (comma separated)" Margin="0,14,0,4" FontWeight="SemiBold"/>
     <TextBox x:Name="TagsBox" Padding="4,4"/>
 

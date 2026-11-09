@@ -44,6 +44,12 @@ List
 - Right-click empty space: add item, add from screenshot, add from clipboard, clear completed.
 - "Show completed" at the bottom lists finished items. Untick one to restore it.
 
+Drag and drop
+- Drag an email from Outlook, a PDF (e.g. meeting minutes), a Word file, an image or a text file onto the
+  note or the edge icon. Claude lists the actions. Add your name and initials in Settings so it can
+  pick out your actions in minutes.
+- The original file is kept; right-click an item > Show source opens it (emails open in Outlook).
+
 AI capture (works from any app)
 - Ctrl+Shift+T: the screen dims. Drag a box round the email or message. Click once to use the whole monitor.
 - Ctrl+Shift+Y: reads whatever you copied (selected text, a copied image, or an image file).

@@ -48,7 +48,7 @@ namespace TodoEdge
 
         public List<ReviewItem> Selected { get; private set; } = new List<ReviewItem>();
 
-        public ReviewWindow(List<ProposedTask> tasks, byte[]? png, List<string> tags)
+        public ReviewWindow(List<ProposedTask> tasks, byte[]? png, List<string> tags, string? sourceName = null)
         {
             InitializeComponent();
 
@@ -65,7 +65,8 @@ namespace TodoEdge
             }).ToList();
 
             TaskList.ItemsSource = _items;
-            Header.Text = _items.Count == 1 ? "Claude found 1 to-do item" : $"Claude found {_items.Count} to-do items";
+            Header.Text = (_items.Count == 1 ? "Claude found 1 to-do item" : $"Claude found {_items.Count} to-do items")
+                          + (sourceName != null ? " in " + sourceName : "");
 
             if (png != null)
                 Preview.Source = ImageUtil.ToBitmapImage(png);

@@ -212,6 +212,40 @@ namespace TodoEdge
             _ = _c.FromSpokenOrTypedTextAsync(text, dictated: true); // typed or spoken, it is your own note
         }
 
+        // ---------- drag and drop ----------
+
+        private void Note_DragEnter(object sender, DragEventArgs e)
+        {
+            e.Effects = DragDropEffects.Copy;
+            DropOverlay.Visibility = Visibility.Visible;
+            if (OpenedByHover) OpenedByHover = false; // keep the note open while you aim
+            e.Handled = true;
+        }
+
+        private void Note_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+
+        private void Note_DragLeave(object sender, DragEventArgs e)
+        {
+            // DragLeave also fires when moving between child elements; only hide when really outside.
+            var p = e.GetPosition(NoteBorder);
+            if (p.X <= 0 || p.Y <= 0 || p.X >= NoteBorder.ActualWidth || p.Y >= NoteBorder.ActualHeight)
+                DropOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void Note_Drop(object sender, DragEventArgs e)
+        {
+            DropOverlay.Visibility = Visibility.Collapsed;
+            e.Effects = DragDropEffects.Copy; // never let Outlook treat this as a move
+            e.Handled = true;
+            var data = e.Data;
+            // Read the data now, while Outlook still holds the drag, then process.
+            _ = _c.FromDataAsync(data);
+        }
+
         // ---------- dictation ----------
 
         private void Mic_Click(object sender, RoutedEventArgs e)
@@ -245,7 +279,7 @@ namespace TodoEdge
             _dictating = false;
             _dictationTimeout.Stop();
             MicButton.ClearValue(ForegroundProperty);
-            AddBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD1, 0xD5, 0xDB));
+            AddBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD9, 0xC6, 0x5A));
             AddPlaceholder.Text = "Add a to-do, or Ctrl+Enter to let Claude sort it";
             if (closeVoiceTyping && AddBox.IsKeyboardFocused) Native.ToggleVoiceTyping();
         }

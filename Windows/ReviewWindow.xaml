@@ -14,7 +14,7 @@
     </Grid.RowDefinitions>
 
     <StackPanel>
-      <TextBlock x:Name="Header" FontSize="16" FontWeight="SemiBold" Foreground="#111827"/>
+      <TextBlock x:Name="Header" FontSize="16" FontWeight="SemiBold" Foreground="#111827" TextWrapping="Wrap"/>
       <TextBlock Text="Untick anything you don't want. Edit titles and dates before adding."
                  Foreground="#6B7280" Margin="0,3,0,0"/>
     </StackPanel>
