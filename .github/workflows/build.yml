@@ -1,0 +1,33 @@
+name: Build TodoEdge
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build self-contained exe
+        run: dotnet publish TodoEdge.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TodoEdge
+          path: publish/TodoEdge.exe
+
+      - name: Publish release with download link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "build-${{ github.run_number }}" publish/TodoEdge.exe --title "TodoEdge build ${{ github.run_number }}" --notes "Download TodoEdge.exe below and run it. No install needed." --latest
