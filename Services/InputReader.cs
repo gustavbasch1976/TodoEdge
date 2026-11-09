@@ -80,6 +80,22 @@ namespace TodoEdge
                     problems.Add("Files: the app offered a file but sent none");
                 }
                 catch (Exception ex) when (!ex.Message.StartsWith("Can't read")) { problems.Add("Files: " + ex.Message); }
+
+                // Fallback for Chromium apps: use any text or HTML they attached as custom data.
+                var custom = new List<(string Type, string Value)>();
+                try { custom = OutlookDrop.ReadChromiumCustomData(data); } catch { }
+                foreach (var (type, value) in custom)
+                {
+                    string t = type.ToLowerInvariant();
+                    if ((t.Contains("text/plain") || t.Contains("text/html")) && value.Trim().Length > 80)
+                    {
+                        string text = t.Contains("html") ? HtmlToText(value) : value;
+                        return new CaptureInput { Kind = "email", Text = Trim(text) };
+                    }
+                }
+                if (custom.Count > 0)
+                    problems.Add("Custom data: " + string.Join("; ", custom.Select(c =>
+                        c.Type + " = " + (c.Value.Length > 120 ? c.Value.Substring(0, 120) + "..." : c.Value))));
             }
 
             bool hasVirtual = false;

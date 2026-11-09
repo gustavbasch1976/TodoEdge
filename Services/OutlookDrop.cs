@@ -56,52 +56,59 @@ namespace TodoEdge
 
             IDataObjectAsyncCapability? async = null;
             bool started = false;
+            string asyncInfo = "async: not offered";
             try
             {
                 async = com as IDataObjectAsyncCapability;
                 if (async != null)
                 {
                     async.GetAsyncMode(out bool isAsync);
+                    asyncInfo = "async: offered, mode " + (isAsync ? "on" : "off");
                     if (isAsync)
                     {
                         async.StartOperation(IntPtr.Zero);
                         started = true;
+                        asyncInfo += ", started";
                     }
-                }
-            }
-            catch
-            {
-                // Not supported: carry on with a normal request.
-            }
-
-            int hr = 0;
-            try
-            {
-                // The first attempt runs during the drop itself. In async mode the source stays available after the
-                // drop, so keep asking while it finishes writing the file (large emails and attachments take time).
-                DateTime deadline = DateTime.Now.AddSeconds(45);
-                int attempt = 0;
-                while (true)
-                {
-                    try
-                    {
-                        var files = ReadHDrop(com);
-                        if (files.Count > 0 || !started || DateTime.Now > deadline) return files;
-                    }
-                    catch (COMException ex) when (ex.HResult == DV_E_FORMATETC && started && DateTime.Now < deadline)
-                    {
-                        // Not ready yet.
-                    }
-
-                    attempt++;
-                    if (attempt == 1) status?.Invoke("Waiting for Outlook to hand over the email...");
-                    await Task.Delay(500);
                 }
             }
             catch (Exception ex)
             {
-                hr = ex.HResult;
-                throw;
+                asyncInfo += ", error " + ex.Message;
+            }
+
+            int hr = 0;
+            DateTime begin = DateTime.Now;
+            int attempts = 0;
+            string lastError = "";
+            try
+            {
+                // The first attempt runs during the drop itself. In async mode the source stays available after the
+                // drop, so keep asking while it finishes writing the file (large emails and attachments take time).
+                DateTime deadline = begin.AddSeconds(45);
+                while (true)
+                {
+                    attempts++;
+                    try
+                    {
+                        var files = ReadHDrop(com);
+                        if (files.Count > 0) return files;
+                        lastError = "file list was empty or files did not exist";
+                    }
+                    catch (COMException ex)
+                    {
+                        lastError = ex.Message;
+                    }
+
+                    if (!started || DateTime.Now > deadline)
+                    {
+                        hr = DV_E_FORMATETC;
+                        throw new Exception($"{lastError} [{asyncInfo}; {attempts} attempt(s) over " +
+                                            $"{(DateTime.Now - begin).TotalSeconds:0} s]");
+                    }
+                    if (attempts == 1) status?.Invoke("Waiting for Outlook to hand over the email...");
+                    await Task.Delay(500);
+                }
             }
             finally
             {
@@ -110,6 +117,47 @@ namespace TodoEdge
                     try { async!.EndOperation(hr, IntPtr.Zero, 1 /* DROPEFFECT_COPY */); } catch { }
                 }
             }
+        }
+
+        /// <summary>
+        /// Chromium apps attach "web custom data": a list of (type, value) pairs. Returns them for fallback and diagnosis.
+        /// </summary>
+        public static List<(string Type, string Value)> ReadChromiumCustomData(System.Windows.IDataObject data)
+        {
+            var list = new List<(string, string)>();
+            byte[]? buf = null;
+            const string format = "Chromium Web Custom MIME Data Format";
+            try { buf = (data.GetData(format) as MemoryStream)?.ToArray(); } catch { }
+            if (buf == null)
+            {
+                var com = Unwrap(data);
+                if (com != null) buf = GetHGlobal(com, (short)DataFormats.GetDataFormat(format).Id, -1);
+            }
+            if (buf == null || buf.Length < 8) return list;
+
+            // Chromium Pickle: uint32 payload size, uint32 count, then per entry two UTF-16 strings
+            // (int32 length in chars, the characters, padded to 4 bytes).
+            int pos = 4;
+            int count = BitConverter.ToInt32(buf, pos); pos += 4;
+            for (int i = 0; i < count && i < 50; i++)
+            {
+                string? type = ReadString16(buf, ref pos);
+                string? value = ReadString16(buf, ref pos);
+                if (type == null || value == null) break;
+                list.Add((type, value));
+            }
+            return list;
+        }
+
+        private static string? ReadString16(byte[] buf, ref int pos)
+        {
+            if (pos + 4 > buf.Length) return null;
+            int chars = BitConverter.ToInt32(buf, pos); pos += 4;
+            int bytes = chars * 2;
+            if (chars < 0 || pos + bytes > buf.Length) return null;
+            string s = Encoding.Unicode.GetString(buf, pos, bytes);
+            pos += (bytes + 3) & ~3;
+            return s;
         }
 
         private static List<(string Name, byte[] Bytes)> ReadHDrop(ComDataObject com)
