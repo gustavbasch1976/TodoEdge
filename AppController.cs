@@ -210,13 +210,15 @@ namespace TodoEdge
             CaptureInput? input;
             try
             {
-                input = InputReader.FromData(data);
+                input = await InputReader.FromDataAsync(data, message => SetBusy(true, message));
             }
             catch (Exception ex)
             {
-                ShowError(ex.Message);
+                SetBusy(false, "");
+                ShowError(ex.Message + "\n\nIf this keeps happening with an email, open it and press Ctrl+Shift+T to read it as a screenshot.");
                 return;
             }
+            SetBusy(false, "");
 
             if (input == null)
             {

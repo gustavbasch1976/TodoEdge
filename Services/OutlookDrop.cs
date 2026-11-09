@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using ComDataObject = System.Runtime.InteropServices.ComTypes.IDataObject;
 using ComFILETIME = System.Runtime.InteropServices.ComTypes.FILETIME;
@@ -48,9 +49,9 @@ namespace TodoEdge
         /// which only write the file once the drop target announces an "async operation" (otherwise they reply
         /// DV_E_FORMATETC). Returns the file names and their bytes, read before the source cleans up.
         /// </summary>
-        public static List<(string Name, byte[] Bytes)> ReadFileDropRaw(System.Windows.IDataObject data)
+        public static async Task<List<(string Name, byte[] Bytes)>> ReadFileDropRawAsync(
+            System.Windows.IDataObject data, Action<string>? status)
         {
-            var result = new List<(string, byte[])>();
             ComDataObject com = Unwrap(data) ?? throw new Exception("could not reach the raw drag data");
 
             IDataObjectAsyncCapability? async = null;
@@ -76,21 +77,25 @@ namespace TodoEdge
             int hr = 0;
             try
             {
-                var format = new FORMATETC
+                // The first attempt runs during the drop itself. In async mode the source stays available after the
+                // drop, so keep asking while it finishes writing the file (large emails and attachments take time).
+                DateTime deadline = DateTime.Now.AddSeconds(45);
+                int attempt = 0;
+                while (true)
                 {
-                    cfFormat = CF_HDROP, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, ptd = IntPtr.Zero, tymed = TYMED.TYMED_HGLOBAL
-                };
-                com.GetData(ref format, out STGMEDIUM medium);
-                try
-                {
-                    foreach (string path in DropPaths(medium.unionmember))
+                    try
                     {
-                        if (File.Exists(path)) result.Add((Path.GetFileName(path), File.ReadAllBytes(path)));
+                        var files = ReadHDrop(com);
+                        if (files.Count > 0 || !started || DateTime.Now > deadline) return files;
                     }
-                }
-                finally
-                {
-                    ReleaseStgMedium(ref medium);
+                    catch (COMException ex) when (ex.HResult == DV_E_FORMATETC && started && DateTime.Now < deadline)
+                    {
+                        // Not ready yet.
+                    }
+
+                    attempt++;
+                    if (attempt == 1) status?.Invoke("Waiting for Outlook to hand over the email...");
+                    await Task.Delay(500);
                 }
             }
             catch (Exception ex)
@@ -104,6 +109,27 @@ namespace TodoEdge
                 {
                     try { async!.EndOperation(hr, IntPtr.Zero, 1 /* DROPEFFECT_COPY */); } catch { }
                 }
+            }
+        }
+
+        private static List<(string Name, byte[] Bytes)> ReadHDrop(ComDataObject com)
+        {
+            var result = new List<(string, byte[])>();
+            var format = new FORMATETC
+            {
+                cfFormat = CF_HDROP, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, ptd = IntPtr.Zero, tymed = TYMED.TYMED_HGLOBAL
+            };
+            com.GetData(ref format, out STGMEDIUM medium);
+            try
+            {
+                foreach (string path in DropPaths(medium.unionmember))
+                {
+                    if (File.Exists(path)) result.Add((Path.GetFileName(path), File.ReadAllBytes(path)));
+                }
+            }
+            finally
+            {
+                ReleaseStgMedium(ref medium);
             }
             return result;
         }
@@ -316,6 +342,7 @@ namespace TodoEdge
         // ---------- interop ----------
 
         private const short CF_HDROP = 15;
+        private const int DV_E_FORMATETC = unchecked((int)0x80040064);
         private const uint STGM_CREATE = 0x00001000;
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]

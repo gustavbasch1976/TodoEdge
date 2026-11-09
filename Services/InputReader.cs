@@ -41,8 +41,11 @@ namespace TodoEdge
 
         public static string SupportedList => "emails (.msg, .eml), PDFs, Word (.docx), images and text files";
 
-        /// <summary>Reads a drag-and-drop or clipboard data object. Must run before the drop handler returns.</summary>
-        public static CaptureInput? FromData(IDataObject data)
+        /// <summary>
+        /// Reads a drag-and-drop data object. Everything up to the first wait runs during the drop itself,
+        /// which is when most apps' data is available.
+        /// </summary>
+        public static async System.Threading.Tasks.Task<CaptureInput?> FromDataAsync(IDataObject data, Action<string>? status)
         {
             var problems = new List<string>();
 
@@ -66,7 +69,7 @@ namespace TodoEdge
                 // Chromium-based apps (new Outlook, browsers) need the file requested a different way.
                 try
                 {
-                    var dropped = OutlookDrop.ReadFileDropRaw(data);
+                    var dropped = await OutlookDrop.ReadFileDropRawAsync(data, status);
                     foreach (var (name, bytes) in dropped)
                     {
                         var input = FromBytes(name, bytes);
