@@ -44,6 +44,85 @@ namespace TodoEdge
         }
 
         /// <summary>
+        /// Reads a normal file drop straight from the source. Needed for Chromium-based apps such as the new Outlook,
+        /// which only write the file once the drop target announces an "async operation" (otherwise they reply
+        /// DV_E_FORMATETC). Returns the file names and their bytes, read before the source cleans up.
+        /// </summary>
+        public static List<(string Name, byte[] Bytes)> ReadFileDropRaw(System.Windows.IDataObject data)
+        {
+            var result = new List<(string, byte[])>();
+            ComDataObject com = Unwrap(data) ?? throw new Exception("could not reach the raw drag data");
+
+            IDataObjectAsyncCapability? async = null;
+            bool started = false;
+            try
+            {
+                async = com as IDataObjectAsyncCapability;
+                if (async != null)
+                {
+                    async.GetAsyncMode(out bool isAsync);
+                    if (isAsync)
+                    {
+                        async.StartOperation(IntPtr.Zero);
+                        started = true;
+                    }
+                }
+            }
+            catch
+            {
+                // Not supported: carry on with a normal request.
+            }
+
+            int hr = 0;
+            try
+            {
+                var format = new FORMATETC
+                {
+                    cfFormat = CF_HDROP, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = -1, ptd = IntPtr.Zero, tymed = TYMED.TYMED_HGLOBAL
+                };
+                com.GetData(ref format, out STGMEDIUM medium);
+                try
+                {
+                    foreach (string path in DropPaths(medium.unionmember))
+                    {
+                        if (File.Exists(path)) result.Add((Path.GetFileName(path), File.ReadAllBytes(path)));
+                    }
+                }
+                finally
+                {
+                    ReleaseStgMedium(ref medium);
+                }
+            }
+            catch (Exception ex)
+            {
+                hr = ex.HResult;
+                throw;
+            }
+            finally
+            {
+                if (started)
+                {
+                    try { async!.EndOperation(hr, IntPtr.Zero, 1 /* DROPEFFECT_COPY */); } catch { }
+                }
+            }
+            return result;
+        }
+
+        private static List<string> DropPaths(IntPtr hDrop)
+        {
+            var paths = new List<string>();
+            uint count = DragQueryFile(hDrop, 0xFFFFFFFF, null, 0);
+            for (uint i = 0; i < count; i++)
+            {
+                uint len = DragQueryFile(hDrop, i, null, 0);
+                var sb = new StringBuilder((int)len + 1);
+                DragQueryFile(hDrop, i, sb, sb.Capacity);
+                paths.Add(sb.ToString());
+            }
+            return paths;
+        }
+
+        /// <summary>
         /// WPF wraps the drag source's COM data object. Its own wrapper rejects per-file requests, so dig out the
         /// original COM object and talk to it directly.
         /// </summary>
@@ -236,7 +315,21 @@ namespace TodoEdge
 
         // ---------- interop ----------
 
+        private const short CF_HDROP = 15;
         private const uint STGM_CREATE = 0x00001000;
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint DragQueryFile(IntPtr hDrop, uint iFile, StringBuilder? lpszFile, int cch);
+
+        [ComImport, Guid("3D8B0590-F691-11d2-8EA9-006097DF5BD4"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IDataObjectAsyncCapability
+        {
+            void SetAsyncMode([MarshalAs(UnmanagedType.Bool)] bool fDoOpAsync);
+            void GetAsyncMode([MarshalAs(UnmanagedType.Bool)] out bool pfIsOpAsync);
+            void StartOperation(IntPtr pbcReserved);
+            void InOperation([MarshalAs(UnmanagedType.Bool)] out bool pfInAsyncOp);
+            void EndOperation(int hResult, IntPtr pbcReserved, uint dwEffects);
+        }
         private const uint STGM_READWRITE = 0x00000002;
         private const uint STGM_SHARE_EXCLUSIVE = 0x00000010;
 

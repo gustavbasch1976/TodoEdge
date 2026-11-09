@@ -46,18 +46,38 @@ namespace TodoEdge
         {
             var problems = new List<string>();
 
-            try
+            bool hasFiles = false;
+            try { hasFiles = data.GetDataPresent(DataFormats.FileDrop); } catch { }
+            if (hasFiles)
             {
-                if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] files)
+                string[]? files = null;
+                try { files = data.GetData(DataFormats.FileDrop) as string[]; } catch { }
+
+                if (files != null && files.Length > 0)
                 {
                     foreach (string f in files)
                     {
                         var input = FromFile(f);
                         if (input != null) return input;
                     }
+                    throw new Exception("Can't read " + string.Join(", ", files.Select(Path.GetFileName)) + ".\n\nDrop " + SupportedList + ".");
                 }
+
+                // Chromium-based apps (new Outlook, browsers) need the file requested a different way.
+                try
+                {
+                    var dropped = OutlookDrop.ReadFileDropRaw(data);
+                    foreach (var (name, bytes) in dropped)
+                    {
+                        var input = FromBytes(name, bytes);
+                        if (input != null) return input;
+                    }
+                    if (dropped.Count > 0)
+                        throw new Exception("Can't read " + string.Join(", ", dropped.Select(d => d.Name)) + ".\n\nDrop " + SupportedList + ".");
+                    problems.Add("Files: the app offered a file but sent none");
+                }
+                catch (Exception ex) when (!ex.Message.StartsWith("Can't read")) { problems.Add("Files: " + ex.Message); }
             }
-            catch (Exception ex) { problems.Add("Files: " + ex.Message); }
 
             bool hasVirtual = false;
             try { hasVirtual = OutlookDrop.HasVirtualFiles(data); } catch { }
