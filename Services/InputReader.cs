@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -43,38 +44,72 @@ namespace TodoEdge
         /// <summary>Reads a drag-and-drop or clipboard data object. Must run before the drop handler returns.</summary>
         public static CaptureInput? FromData(IDataObject data)
         {
-            if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] files)
+            var problems = new List<string>();
+
+            try
             {
-                foreach (string f in files)
+                if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] files)
                 {
-                    var input = FromFile(f);
-                    if (input != null) return input;
+                    foreach (string f in files)
+                    {
+                        var input = FromFile(f);
+                        if (input != null) return input;
+                    }
                 }
             }
+            catch (Exception ex) { problems.Add("Files: " + ex.Message); }
 
-            if (OutlookDrop.HasVirtualFiles(data))
+            bool hasVirtual = false;
+            try { hasVirtual = OutlookDrop.HasVirtualFiles(data); } catch { }
+            if (hasVirtual)
             {
-                foreach (var (name, bytes) in OutlookDrop.Read(data))
+                try
                 {
-                    var input = FromBytes(name, bytes);
-                    if (input != null) return input;
+                    foreach (var (name, bytes) in OutlookDrop.Read(data))
+                    {
+                        var input = FromBytes(name, bytes);
+                        if (input != null) return input;
+                    }
+                    problems.Add("Dragged item is not a supported type");
+                }
+                catch (Exception ex) { problems.Add("Dragged email/file: " + ex.Message); }
+
+                // Outlook's fallback text is only a header line, so don't silently use it.
+                throw new Exception("Could not read the dragged email.\n\n" + string.Join("\n", problems) +
+                                    "\n\nFormats offered: " + Formats(data) +
+                                    "\n\nWorkaround: drag the email to your desktop first, then drop that file here.");
+            }
+
+            try
+            {
+                if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is System.Windows.Media.Imaging.BitmapSource bmp)
+                {
+                    var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                    using var ms = new MemoryStream();
+                    encoder.Save(ms);
+                    return new CaptureInput { Kind = "image", Png = ms.ToArray() };
                 }
             }
+            catch (Exception ex) { problems.Add("Image: " + ex.Message); }
 
-            if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is System.Windows.Media.Imaging.BitmapSource bmp)
+            try
             {
-                var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-                encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
-                using var ms = new MemoryStream();
-                encoder.Save(ms);
-                return new CaptureInput { Kind = "image", Png = ms.ToArray() };
+                if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text
+                    && !string.IsNullOrWhiteSpace(text))
+                    return new CaptureInput { Kind = "text", Text = Trim(text) };
             }
+            catch (Exception ex) { problems.Add("Text: " + ex.Message); }
 
-            if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text
-                && !string.IsNullOrWhiteSpace(text))
-                return new CaptureInput { Kind = "text", Text = Trim(text) };
-
+            if (problems.Count > 0)
+                throw new Exception("Could not read what was dropped.\n\n" + string.Join("\n", problems) + "\n\nFormats offered: " + Formats(data));
             return null;
+        }
+
+        private static string Formats(IDataObject data)
+        {
+            try { return string.Join(", ", data.GetFormats(false)); }
+            catch { return "unknown"; }
         }
 
         public static CaptureInput? FromFile(string path)

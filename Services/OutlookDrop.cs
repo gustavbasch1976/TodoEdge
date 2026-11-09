@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
@@ -23,36 +24,77 @@ namespace TodoEdge
         public static List<(string Name, byte[] Bytes)> Read(System.Windows.IDataObject data)
         {
             var result = new List<(string, byte[])>();
-            List<string> names = ReadNames(data);
-            if (data is not ComDataObject com) return result;
+            ComDataObject? com = Unwrap(data);
+            if (com == null) throw new Exception("could not reach the raw drag data");
+
+            List<string> names = ReadNames(com, data);
+            if (names.Count == 0) throw new Exception("the dragged item had no file name list");
 
             short cf = (short)DataFormats.GetDataFormat("FileContents").Id;
+            var errors = new List<string>();
             for (int i = 0; i < names.Count; i++)
             {
-                byte[]? bytes = ReadContents(com, cf, i);
+                byte[]? bytes = ReadContents(com, cf, i, names.Count, errors);
                 if (bytes != null && bytes.Length > 0) result.Add((names[i], bytes));
             }
+            if (result.Count == 0)
+                throw new Exception("could not read the contents of " + string.Join(", ", names) +
+                                    (errors.Count > 0 ? " (" + string.Join("; ", errors) + ")" : ""));
             return result;
         }
 
-        private static List<string> ReadNames(System.Windows.IDataObject data)
+        /// <summary>
+        /// WPF wraps the drag source's COM data object. Its own wrapper rejects per-file requests, so dig out the
+        /// original COM object and talk to it directly.
+        /// </summary>
+        private static ComDataObject? Unwrap(object obj, int depth = 0)
+        {
+            if (depth > 4) return null;
+            if (Marshal.IsComObject(obj) && obj is ComDataObject direct) return direct;
+
+            foreach (var field in obj.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
+            {
+                if (field.FieldType.IsPrimitive || field.FieldType == typeof(string)) continue;
+                object? value;
+                try { value = field.GetValue(obj); } catch { continue; }
+                if (value == null || ReferenceEquals(value, obj)) continue;
+
+                if (Marshal.IsComObject(value) && value is ComDataObject com) return com;
+                if (value is System.Windows.IDataObject || value.GetType().Name.Contains("Ole"))
+                {
+                    var inner = Unwrap(value, depth + 1);
+                    if (inner != null) return inner;
+                }
+            }
+            return depth == 0 ? obj as ComDataObject : null;
+        }
+
+        private static List<string> ReadNames(ComDataObject com, System.Windows.IDataObject data)
+        {
+            foreach (bool unicode in new[] { true, false })
+            {
+                string formatName = unicode ? "FileGroupDescriptorW" : "FileGroupDescriptor";
+                byte[]? buf = GetHGlobal(com, (short)DataFormats.GetDataFormat(formatName).Id, -1);
+                if (buf == null)
+                {
+                    try { buf = (data.GetData(formatName) as MemoryStream)?.ToArray(); } catch { }
+                }
+                if (buf != null && buf.Length >= 4) return ParseNames(buf, unicode);
+            }
+            return new List<string>();
+        }
+
+        private static List<string> ParseNames(byte[] buf, bool unicode)
         {
             var names = new List<string>();
-            bool unicode = data.GetDataPresent("FileGroupDescriptorW");
-            if (data.GetData(unicode ? "FileGroupDescriptorW" : "FileGroupDescriptor") is not MemoryStream ms) return names;
-
-            byte[] buf = ms.ToArray();
-            if (buf.Length < 4) return names;
             int count = BitConverter.ToInt32(buf, 0);
-            // FILEDESCRIPTOR: 72 bytes of fields, then the file name (260 chars).
-            int nameOffset = 72;
+            const int nameOffset = 72; // FILEDESCRIPTOR fields before the name
             int size = unicode ? 72 + 520 : 72 + 260;
             for (int i = 0; i < count; i++)
             {
                 int start = 4 + i * size + nameOffset;
                 if (start >= buf.Length) break;
-                int len = unicode ? 520 : 260;
-                len = Math.Min(len, buf.Length - start);
+                int len = Math.Min(unicode ? 520 : 260, buf.Length - start);
                 string name = unicode ? Encoding.Unicode.GetString(buf, start, len) : Encoding.Default.GetString(buf, start, len);
                 int nul = name.IndexOf('\0');
                 names.Add(nul >= 0 ? name.Substring(0, nul) : name);
@@ -60,45 +102,73 @@ namespace TodoEdge
             return names;
         }
 
-        private static byte[]? ReadContents(ComDataObject com, short cf, int index)
+        private static byte[]? GetHGlobal(ComDataObject com, short cf, int index)
         {
-            var format = new FORMATETC
-            {
-                cfFormat = cf,
-                dwAspect = DVASPECT.DVASPECT_CONTENT,
-                lindex = index,
-                ptd = IntPtr.Zero,
-                tymed = TYMED.TYMED_ISTREAM | TYMED.TYMED_ISTORAGE | TYMED.TYMED_HGLOBAL
-            };
-
-            STGMEDIUM medium;
+            var format = new FORMATETC { cfFormat = cf, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = index, ptd = IntPtr.Zero, tymed = TYMED.TYMED_HGLOBAL };
             try
             {
-                com.GetData(ref format, out medium);
+                com.GetData(ref format, out STGMEDIUM medium);
+                try { return medium.tymed == TYMED.TYMED_HGLOBAL ? FromHGlobal(medium.unionmember) : null; }
+                finally { ReleaseStgMedium(ref medium); }
             }
             catch
             {
                 return null;
             }
+        }
 
-            try
+        private static byte[]? ReadContents(ComDataObject com, short cf, int index, int count, List<string> errors)
+        {
+            // Different apps accept different requests, so try the combinations in turn.
+            var attempts = new List<(int lindex, TYMED tymed)>
             {
-                switch (medium.tymed)
+                (index, TYMED.TYMED_ISTORAGE | TYMED.TYMED_ISTREAM | TYMED.TYMED_HGLOBAL),
+                (index, TYMED.TYMED_ISTORAGE),
+                (index, TYMED.TYMED_ISTREAM),
+                (index, TYMED.TYMED_HGLOBAL),
+            };
+            if (count == 1)
+            {
+                attempts.Add((-1, TYMED.TYMED_ISTORAGE | TYMED.TYMED_ISTREAM | TYMED.TYMED_HGLOBAL));
+                attempts.Add((-1, TYMED.TYMED_HGLOBAL));
+            }
+
+            foreach (var (lindex, tymed) in attempts)
+            {
+                var format = new FORMATETC { cfFormat = cf, dwAspect = DVASPECT.DVASPECT_CONTENT, lindex = lindex, ptd = IntPtr.Zero, tymed = tymed };
+                STGMEDIUM medium;
+                try
                 {
-                    case TYMED.TYMED_HGLOBAL:
-                        return FromHGlobal(medium.unionmember);
-                    case TYMED.TYMED_ISTREAM:
-                        return FromStream((ComStream)Marshal.GetObjectForIUnknown(medium.unionmember));
-                    case TYMED.TYMED_ISTORAGE:
-                        return FromStorage((IStorage)Marshal.GetObjectForIUnknown(medium.unionmember));
-                    default:
-                        return null;
+                    com.GetData(ref format, out medium);
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"{tymed}/{lindex}: {ex.Message}");
+                    continue;
+                }
+
+                try
+                {
+                    switch (medium.tymed)
+                    {
+                        case TYMED.TYMED_HGLOBAL:
+                            return FromHGlobal(medium.unionmember);
+                        case TYMED.TYMED_ISTREAM:
+                            return FromStream((ComStream)Marshal.GetObjectForIUnknown(medium.unionmember));
+                        case TYMED.TYMED_ISTORAGE:
+                            return FromStorage((IStorage)Marshal.GetObjectForIUnknown(medium.unionmember));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"reading {medium.tymed}: {ex.Message}");
+                }
+                finally
+                {
+                    ReleaseStgMedium(ref medium);
                 }
             }
-            finally
-            {
-                ReleaseStgMedium(ref medium);
-            }
+            return null;
         }
 
         private static byte[] FromHGlobal(IntPtr hGlobal)
