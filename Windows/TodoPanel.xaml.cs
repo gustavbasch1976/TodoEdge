@@ -15,7 +15,14 @@ namespace TodoEdge
         private readonly DispatcherTimer _undoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
         private TodoItem? _undoItem;
         private int _undoIndex = -1;
+        private readonly DispatcherTimer _leaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        private readonly DispatcherTimer _dictationTimeout = new DispatcherTimer { Interval = TimeSpan.FromSeconds(90) };
+        private DateTime? _outsideSince;
+        private bool _dictating;
         private IntPtr _anchor;
+
+        /// <summary>True while the list was opened by hovering and you have not clicked into it yet.</summary>
+        public bool OpenedByHover { get; private set; }
         private string _anchorEdge = "Top";
 
         public TodoPanel(AppController controller)
@@ -28,11 +35,15 @@ namespace TodoEdge
             Refresh();
 
             _undoTimer.Tick += (s, e) => HideUndo();
+            _leaveTimer.Tick += LeaveTimer_Tick;
+            _dictationTimeout.Tick += (s, e) => StopDictation(closeVoiceTyping: false);
+            Activated += (s, e) => OpenedByHover = false; // clicking into the list keeps it open
 
             SourceInitialized += (s, e) => Native.MakeToolWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle);
             Deactivated += (s, e) =>
             {
                 if (_c.IsMouseOverEdge) return; // the edge icon's own click toggles us
+                if (_dictating) return;          // the voice typing bar can take focus briefly
                 CommitAllEdits();
                 Hide();
             };
@@ -43,12 +54,14 @@ namespace TodoEdge
 
         // ---------- showing ----------
 
-        public void ShowNear(IntPtr anchorHwnd, string edge, bool focusAdd)
+        public void ShowNear(IntPtr anchorHwnd, string edge, bool focusAdd, bool hover = false)
         {
             _anchor = anchorHwnd;
             _anchorEdge = edge;
             if (!IsVisible)
             {
+                OpenedByHover = hover;
+                ShowActivated = !hover; // hover never steals focus from the app you are typing in
                 Opacity = 0;
                 Show();
                 UpdateLayout();
@@ -60,11 +73,40 @@ namespace TodoEdge
                 Reposition();
             }
 
+            if (hover)
+            {
+                _outsideSince = null;
+                _leaveTimer.Start();
+                return;
+            }
+            Pin(focusAdd);
+        }
+
+        /// <summary>Keeps the list open until you click elsewhere.</summary>
+        public void Pin(bool focusAdd = false)
+        {
+            OpenedByHover = false;
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             Native.SetForegroundWindow(hwnd);
             Activate();
             if (focusAdd)
                 Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => { AddBox.Focus(); Keyboard.Focus(AddBox); }));
+        }
+
+        private void LeaveTimer_Tick(object? sender, EventArgs e)
+        {
+            if (!IsVisible || !OpenedByHover) { _leaveTimer.Stop(); return; }
+            if (IsMouseOver || _c.IsMouseOverEdge || _c.IsBusy || _dictating)
+            {
+                _outsideSince = null;
+                return;
+            }
+            _outsideSince ??= DateTime.Now;
+            if ((DateTime.Now - _outsideSince.Value).TotalMilliseconds > 600)
+            {
+                _leaveTimer.Stop();
+                Hide();
+            }
         }
 
         private void Reposition()
@@ -133,14 +175,79 @@ namespace TodoEdge
 
         private void AddBox_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter) { AddFromBox(); e.Handled = true; }
-            else if (e.Key == Key.Escape) { AddBox.Clear(); Hide(); e.Handled = true; }
+            if (e.Key == Key.Enter)
+            {
+                bool useClaude = _dictating || Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+                if (useClaude) SendToClaude();
+                else AddFromBox();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                if (_dictating) StopDictation(closeVoiceTyping: true);
+                AddBox.Clear();
+                Hide();
+                e.Handled = true;
+            }
         }
 
         private void AddButton_Click(object sender, RoutedEventArgs e)
         {
             if (AddBox.Text.Trim().Length == 0) { AddBox.Focus(); return; }
-            AddFromBox();
+            if (_dictating) SendToClaude();
+            else AddFromBox();
+        }
+
+        private void SendToClaude()
+        {
+            string text = AddBox.Text.Trim();
+            StopDictation(closeVoiceTyping: false);
+            if (text.Length == 0) return;
+            AddBox.Clear();
+            if (_c.GetApiKey() == null)
+            {
+                _c.Store.Add(new TodoItem { Title = text }); // no key: add as typed
+                return;
+            }
+            _ = _c.FromSpokenOrTypedTextAsync(text, dictated: true); // typed or spoken, it is your own note
+        }
+
+        // ---------- dictation ----------
+
+        private void Mic_Click(object sender, RoutedEventArgs e)
+        {
+            if (_dictating) StopDictation(closeVoiceTyping: true);
+            else StartDictation();
+        }
+
+        public void StartDictation()
+        {
+            if (_dictating) return;
+            Pin();
+            _dictating = true;
+            MicButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26));
+            AddBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26));
+            AddPlaceholder.Text = "Listening... speak, then press Enter";
+            _dictationTimeout.Start();
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(async () =>
+            {
+                AddBox.Focus();
+                Keyboard.Focus(AddBox);
+                AddBox.CaretIndex = AddBox.Text.Length;
+                await System.Threading.Tasks.Task.Delay(200);
+                Native.ToggleVoiceTyping();
+            }));
+        }
+
+        private void StopDictation(bool closeVoiceTyping)
+        {
+            if (!_dictating) return;
+            _dictating = false;
+            _dictationTimeout.Stop();
+            MicButton.ClearValue(ForegroundProperty);
+            AddBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD1, 0xD5, 0xDB));
+            AddPlaceholder.Text = "Add a to-do, or Ctrl+Enter to let Claude sort it";
+            if (closeVoiceTyping && AddBox.IsKeyboardFocused) Native.ToggleVoiceTyping();
         }
 
         private void AddFromBox()

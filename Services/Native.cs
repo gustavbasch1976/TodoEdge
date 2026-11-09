@@ -34,6 +34,21 @@ namespace TodoEdge
         [DllImport("user32.dll")]
         public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extraInfo);
+
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+
+        /// <summary>Presses Win+H, which opens or closes Windows voice typing in the focused text box.</summary>
+        public static void ToggleVoiceTyping()
+        {
+            const byte VK_LWIN = 0x5B, VK_H = 0x48;
+            keybd_event(VK_LWIN, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_H, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_H, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
         public const uint SWP_NOSIZE = 0x0001;

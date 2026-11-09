@@ -28,6 +28,7 @@ namespace TodoEdge
         private readonly TextBlock _badgeText = new TextBlock();
         private readonly RotateTransform _spin = new RotateTransform();
         private readonly DispatcherTimer _collapseTimer;
+        private readonly DispatcherTimer _hoverOpenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
 
         private static readonly Color AccentColour = Color.FromRgb(0x25, 0x63, 0xEB);
         private static readonly Color AlertColour = Color.FromRgb(0xDC, 0x26, 0x26);
@@ -108,8 +109,18 @@ namespace TodoEdge
             Content = _root;
 
             _root.AllowDrop = true;
-            _root.MouseEnter += (s, e) => Expand();
-            _root.MouseLeave += (s, e) => _collapseTimer.Start();
+            _root.MouseEnter += (s, e) =>
+            {
+                Expand();
+                if (_c.Settings.OpenOnHover) { _hoverOpenTimer.Stop(); _hoverOpenTimer.Start(); }
+            };
+            _root.MouseLeave += (s, e) => { _hoverOpenTimer.Stop(); _collapseTimer.Start(); };
+            _hoverOpenTimer.Tick += (s, e) =>
+            {
+                _hoverOpenTimer.Stop();
+                if (_root.IsMouseOver && !_pressed && !_busy && Mouse.LeftButton == MouseButtonState.Released)
+                    _c.ShowPanel(hover: true);
+            };
             _root.DragEnter += (s, e) => Expand();
             _root.DragLeave += (s, e) => _collapseTimer.Start();
             _root.Drop += (s, e) => { _ = _c.FromDataAsync(e.Data); };
@@ -136,6 +147,7 @@ namespace TodoEdge
             menu.Items.Add(MakeItem("Open to-do list", () => _c.ShowPanel()));
             menu.Items.Add(MakeItem("Add from screenshot", () => _ = _c.CaptureAsync(), "Ctrl+Shift+T"));
             menu.Items.Add(MakeItem("Add from clipboard", () => _ = _c.FromClipboardAsync(), "Ctrl+Shift+Y"));
+            menu.Items.Add(MakeItem("Dictate to-dos", () => _c.StartDictation(), "Ctrl+Shift+D"));
             menu.Items.Add(MakeItem("Add item", () => _c.ShowPanel(focusAdd: true)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MakeItem("Settings", () => _c.OpenSettings()));
@@ -220,6 +232,7 @@ namespace TodoEdge
 
         private void OnDown(object sender, MouseButtonEventArgs e)
         {
+            _hoverOpenTimer.Stop();
             _pressed = true;
             _dragged = false;
             _downScreen = PointToScreen(e.GetPosition(this));

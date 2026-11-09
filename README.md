@@ -24,14 +24,20 @@ How to use it
 -------------
 
 Edge icon
-- A thin blue bar sits at the top of the screen. Hover over it and it becomes a round button.
-- Click: open or close the list.
+- A thin blue bar sits at the top of the screen. Hover over it and the list opens without taking
+  focus from what you are typing. Move away and it closes. Click inside the list to keep it open.
+  (Turn hover-open off in Settings if you prefer clicking.)
+- Click: open, keep open, or close the list.
 - Drag: move it. It snaps to the nearest edge of whichever monitor you drop it on.
 - Right-click: menu (screenshot, clipboard, add item, settings, quit).
 - Badge: number of open items. Red means something is overdue.
 
 List
 - Type at the bottom and press Enter, or click +.
+- Ctrl+Enter sends what you typed to Claude, which splits it into separate items with dates.
+- Microphone button or Ctrl+Shift+D: dictate. Windows voice typing opens; speak, then press Enter.
+  Claude tidies it into to-dos, e.g. "call Jason tomorrow and finish the report by Friday" becomes two
+  dated items. Voice typing needs a microphone and, on Windows 10, online speech recognition turned on.
 - Tick a checkbox to complete an item. An Undo bar shows for 6 seconds.
 - Double-click an item to edit it.
 - Right-click an item: due date, tag, move to top, show source, delete.

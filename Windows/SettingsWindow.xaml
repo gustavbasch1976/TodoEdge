@@ -28,10 +28,12 @@
     <TextBlock Text="Tags (comma separated)" Margin="0,14,0,4" FontWeight="SemiBold"/>
     <TextBox x:Name="TagsBox" Padding="4,4"/>
 
-    <CheckBox x:Name="StartupBox" Content="Start TodoEdge when Windows starts" Margin="0,16,0,0"/>
+    <CheckBox x:Name="HoverBox" Content="Open the list when I hover over the icon" Margin="0,16,0,0"/>
+    <CheckBox x:Name="StartupBox" Content="Start TodoEdge when Windows starts" Margin="0,8,0,0"/>
 
     <TextBlock Margin="0,16,0,0" Foreground="#6B7280" FontSize="12" TextWrapping="Wrap">
       Shortcuts: Ctrl+Shift+T reads a screenshot area. Ctrl+Shift+Y reads text or an image you copied.
+      Ctrl+Shift+D starts dictation.
       Your list is saved in %AppData%\TodoEdge.
     </TextBlock>
 

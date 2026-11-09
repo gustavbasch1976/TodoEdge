@@ -12,6 +12,7 @@ namespace TodoEdge
         public string? ApiKeyProtected { get; set; }
         public string Model { get; set; } = "claude-haiku-5-5";
         public string Edge { get; set; } = "Top";
+        public bool OpenOnHover { get; set; } = true;
         public int? PosX { get; set; }
         public int? PosY { get; set; }
         public List<string> Tags { get; set; } = new List<string> { "VKE", "GBPS", "Personal" };

@@ -165,16 +165,19 @@
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <Border CornerRadius="6" BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" Background="White">
+        <Border x:Name="AddBorder" CornerRadius="6" BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" Background="White">
           <Grid>
-            <TextBlock x:Name="AddPlaceholder" Text="Add a to-do and press Enter" Foreground="#9CA3AF"
+            <TextBlock x:Name="AddPlaceholder" Text="Add a to-do, or Ctrl+Enter to let Claude sort it" Foreground="#9CA3AF"
                        IsHitTestVisible="False" VerticalAlignment="Center"/>
             <TextBox x:Name="AddBox" BorderThickness="0" Background="Transparent" Padding="0"
                      VerticalAlignment="Center" KeyDown="AddBox_KeyDown" TextChanged="AddBox_TextChanged"/>
           </Grid>
         </Border>
-        <Button Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource AddButton}" Content="&#xE710;"
+        <Button Grid.Column="1" x:Name="MicButton" Margin="6,0,0,0" Style="{StaticResource IconButton}" Content="&#xE720;"
+                FontSize="16" Width="32" Height="32" ToolTip="Dictate to-dos (Ctrl+Shift+D)" Click="Mic_Click"/>
+        <Button Grid.Column="2" Margin="6,0,0,0" Style="{StaticResource AddButton}" Content="&#xE710;"
                 ToolTip="Add item" Click="AddButton_Click"/>
       </Grid>
     </Grid>

@@ -19,6 +19,7 @@ namespace TodoEdge
             ModelBox.Text = settings.Model;
             TagsBox.Text = string.Join(", ", settings.Tags);
             StartupBox.IsChecked = StartupHelper.IsEnabled;
+            HoverBox.IsChecked = settings.OpenOnHover;
 
             Loaded += (s, e) =>
             {
@@ -38,6 +39,7 @@ namespace TodoEdge
             }
 
             _settings.ApiKey = key.Length > 0 ? key : null;
+            _settings.OpenOnHover = HoverBox.IsChecked == true;
             string model = ModelBox.Text.Trim();
             _settings.Model = model.Length > 0 ? model : "claude-haiku-5-5";
             _settings.Tags = TagsBox.Text.Split(',')

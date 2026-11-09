@@ -18,6 +18,7 @@ namespace TodoEdge
     {
         private const uint VK_T = 0x54;
         private const uint VK_Y = 0x59;
+        private const uint VK_D = 0x44;
 
         public TaskStore Store { get; } = new TaskStore();
         public AppSettings Settings { get; private set; } = new AppSettings();
@@ -30,6 +31,7 @@ namespace TodoEdge
         private bool _busy;
 
         public bool IsMouseOverEdge => _edge != null && _edge.IsMouseOver;
+        public bool IsBusy => _busy;
 
         public void Start()
         {
@@ -68,6 +70,8 @@ namespace TodoEdge
                 failed.Add("Ctrl+Shift+T");
             if (!_hotkeys.Register(Native.MOD_CONTROL | Native.MOD_SHIFT, VK_Y, () => { _ = FromClipboardAsync(); }))
                 failed.Add("Ctrl+Shift+Y");
+            if (!_hotkeys.Register(Native.MOD_CONTROL | Native.MOD_SHIFT, VK_D, () => StartDictation()))
+                failed.Add("Ctrl+Shift+D");
             if (failed.Count > 0)
                 Balloon("Shortcut not available", string.Join(" and ", failed) + " is used by another app. Use the tray or edge icon menu instead.");
         }
@@ -82,6 +86,7 @@ namespace TodoEdge
             menu.Items.Add("Open to-do list", null, (s, e) => ShowPanel());
             menu.Items.Add("Add from screenshot (Ctrl+Shift+T)", null, (s, e) => { _ = CaptureAsync(); });
             menu.Items.Add("Add from clipboard (Ctrl+Shift+Y)", null, (s, e) => { _ = FromClipboardAsync(); });
+            menu.Items.Add("Dictate to-dos (Ctrl+Shift+D)", null, (s, e) => StartDictation());
             menu.Items.Add("Move icon back to top of screen", null, (s, e) => ResetIconPosition());
             menu.Items.Add(new WF.ToolStripSeparator());
             menu.Items.Add("Settings", null, (s, e) => OpenSettings());
@@ -103,11 +108,25 @@ namespace TodoEdge
 
         public void TogglePanel()
         {
-            if (_panel.IsVisible) HidePanel();
+            if (_panel.IsVisible && _panel.OpenedByHover) _panel.Pin(); // click after hover: keep it open
+            else if (_panel.IsVisible) HidePanel();
             else ShowPanel();
         }
 
-        public void ShowPanel(bool focusAdd = false) => _panel.ShowNear(_edge.Handle, _edge.Edge, focusAdd);
+        public void ShowPanel(bool focusAdd = false, bool hover = false) =>
+            _panel.ShowNear(_edge.Handle, _edge.Edge, focusAdd, hover);
+
+        public void StartDictation()
+        {
+            ShowPanel(focusAdd: true);
+            _panel.StartDictation();
+        }
+
+        public async Task FromSpokenOrTypedTextAsync(string text, bool dictated)
+        {
+            if (_busy || !EnsureKey()) return;
+            await ProcessAsync(null, text, dictated);
+        }
 
         public void HidePanel()
         {
@@ -226,7 +245,7 @@ namespace TodoEdge
 
         // ---------- the Claude round trip ----------
 
-        private async Task ProcessAsync(byte[]? png, string? text)
+        private async Task ProcessAsync(byte[]? png, string? text, bool dictated = false)
         {
             if (_busy) return;
             string? key = GetApiKey();
@@ -239,7 +258,7 @@ namespace TodoEdge
             try
             {
                 byte[]? upload = png != null ? ImageUtil.PrepareForApi(png) : null;
-                tasks = await ClaudeService.ExtractAsync(key, Settings.Model, upload, text);
+                tasks = await ClaudeService.ExtractAsync(key, Settings.Model, upload, text, dictated);
             }
             catch (Exception ex)
             {
@@ -249,9 +268,24 @@ namespace TodoEdge
             }
             SetBusy(false, "");
 
+            if (tasks.Count == 0 && png == null && dictated && text != null)
+            {
+                Store.Add(new TodoItem { Title = text.Length > 200 ? text.Substring(0, 200) : text });
+                ShowPanel();
+                return;
+            }
             if (tasks.Count == 0)
             {
                 Balloon("No to-do items found", "Claude did not find anything for you to do in that. You can still add an item by hand.");
+                return;
+            }
+
+            // A single item from your own words goes straight in; anything else gets a quick review.
+            if (png == null && tasks.Count == 1)
+            {
+                var t = tasks[0];
+                Store.Add(new TodoItem { Title = t.Title, Due = t.Due, Person = t.Person, Notes = t.Notes, SourceText = text });
+                ShowPanel();
                 return;
             }
 

@@ -43,7 +43,7 @@ Respond with JSON only, no other text, in exactly this shape:
 {{""tasks"":[{{""title"":""..."",""due"":""yyyy-MM-dd or null"",""person"":""... or null"",""notes"":""... or null""}}]}}";
         }
 
-        public static async Task<List<ProposedTask>> ExtractAsync(string apiKey, string model, byte[]? png, string? text)
+        public static async Task<List<ProposedTask>> ExtractAsync(string apiKey, string model, byte[]? png, string? text, bool dictated = false)
         {
             var content = new List<object>();
             if (png != null)
@@ -57,7 +57,11 @@ Respond with JSON only, no other text, in exactly this shape:
             }
             else
             {
-                content.Add(new { type = "text", text = "Extract my to-do items from this text:\n\n" + text });
+                string intro = dictated
+                    ? "This is my own note, dictated with speech-to-text, so it may contain recognition errors and filler words. " +
+                      "I am the person doing these tasks. Fix obvious misheard words and turn it into my to-do items:\n\n"
+                    : "Extract my to-do items from this text:\n\n";
+                content.Add(new { type = "text", text = intro + text });
             }
 
             var body = new
