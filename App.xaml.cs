@@ -23,6 +23,9 @@ namespace TodoEdge
 
             base.OnStartup(e);
 
+            // Older emails use Windows code pages (e.g. 1252, Western European). .NET needs these switched on.
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             DispatcherUnhandledException += (s, args) =>
             {
                 MessageBox.Show(args.Exception.Message, "TodoEdge error", MessageBoxButton.OK, MessageBoxImage.Warning);

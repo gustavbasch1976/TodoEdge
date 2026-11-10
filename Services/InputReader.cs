@@ -270,8 +270,9 @@ namespace TodoEdge
             {
                 var eml = MsgReader.Mime.Message.Load(new FileInfo(tmp));
                 string body = "";
-                if (eml.TextBody != null) body = Encoding.UTF8.GetString(eml.TextBody.Body);
-                else if (eml.HtmlBody != null) body = InputReader.HtmlToText(Encoding.UTF8.GetString(eml.HtmlBody.Body));
+                // GetBodyAsText decodes with the charset the email declares (UTF-8, Windows-1252, etc.).
+                if (eml.TextBody != null) body = eml.TextBody.GetBodyAsText();
+                else if (eml.HtmlBody != null) body = InputReader.HtmlToText(eml.HtmlBody.GetBodyAsText());
 
                 var h = eml.Headers;
                 string from = h?.From == null ? "" : $"{h.From.DisplayName} <{h.From.Address}>";
