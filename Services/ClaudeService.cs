@@ -88,7 +88,7 @@ Respond with JSON only, no other text, in exactly this shape:
             var body = new
             {
                 model,
-                max_tokens = 1500,
+                max_tokens = 4096,
                 system = SystemPrompt(myName),
                 messages = new[] { new { role = "user", content } }
             };
@@ -124,41 +124,69 @@ Respond with JSON only, no other text, in exactly this shape:
                     if (block.TryGetProperty("type", out var t) && t.GetString() == "text")
                         sb.Append(block.GetProperty("text").GetString());
                 }
-                return ParseTasks(sb.ToString());
+                string reply = sb.ToString();
+                var tasks = ParseTasks(reply);
+                if (tasks.Count == 0)
+                {
+                    try { System.IO.File.WriteAllText(System.IO.Path.Combine(Paths.Root, "last-reply.txt"), reply); } catch { }
+                }
+                return tasks;
             }
         }
 
+        /// <summary>
+        /// Pulls every complete to-do object out of Claude's reply. Tolerates extra text, code fences and a reply
+        /// that was cut off part way (any finished items are still used).
+        /// </summary>
         public static List<ProposedTask> ParseTasks(string reply)
         {
             var list = new List<ProposedTask>();
-            int start = reply.IndexOf('{');
-            int end = reply.LastIndexOf('}');
-            if (start < 0 || end <= start) return list;
+            var starts = new Stack<int>();
+            bool inString = false, escaped = false;
 
-            using var doc = JsonDocument.Parse(reply.Substring(start, end - start + 1));
-            if (!doc.RootElement.TryGetProperty("tasks", out var tasks) || tasks.ValueKind != JsonValueKind.Array)
-                return list;
-
-            foreach (var t in tasks.EnumerateArray())
+            for (int i = 0; i < reply.Length; i++)
             {
-                string? title = Str(t, "title");
-                if (string.IsNullOrWhiteSpace(title)) continue;
-
-                DateTime? due = null;
-                string? dueText = Str(t, "due");
-                if (dueText != null && DateTime.TryParseExact(dueText, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-                        DateTimeStyles.None, out var d))
-                    due = d;
-
-                list.Add(new ProposedTask
+                char c = reply[i];
+                if (inString)
                 {
-                    Title = title.Trim(),
-                    Due = due,
-                    Person = Str(t, "person"),
-                    Notes = Str(t, "notes")
-                });
+                    if (escaped) escaped = false;
+                    else if (c == '\\') escaped = true;
+                    else if (c == '"') inString = false;
+                    continue;
+                }
+                if (c == '"') { inString = true; continue; }
+                if (c == '{') { starts.Push(i); continue; }
+                if (c != '}' || starts.Count == 0) continue;
+
+                int start = starts.Pop();
+                string candidate = reply.Substring(start, i - start + 1);
+                try
+                {
+                    using var doc = JsonDocument.Parse(candidate);
+                    var task = ParseItem(doc.RootElement);
+                    if (task != null) list.Add(task);
+                }
+                catch (JsonException)
+                {
+                    // Not a complete object: ignore.
+                }
             }
             return list;
+        }
+
+        private static ProposedTask? ParseItem(JsonElement t)
+        {
+            if (t.ValueKind != JsonValueKind.Object) return null;
+            string? title = Str(t, "title");
+            if (string.IsNullOrWhiteSpace(title)) return null;
+
+            DateTime? due = null;
+            string? dueText = Str(t, "due");
+            if (dueText != null && DateTime.TryParseExact(dueText, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var d))
+                due = d;
+
+            return new ProposedTask { Title = title.Trim(), Due = due, Person = Str(t, "person"), Notes = Str(t, "notes") };
         }
 
         private static string? Str(JsonElement e, string name)
