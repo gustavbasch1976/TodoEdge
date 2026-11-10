@@ -49,6 +49,25 @@ namespace TodoEdge
             keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT { public int X, Y; }
+
+        [DllImport("user32.dll")]
+        public static extern bool GetCursorPos(out POINT p);
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        /// <summary>True while the left mouse button is held, including during a drag from another app.</summary>
+        public static bool IsLeftButtonDown => (GetAsyncKeyState(0x01) & 0x8000) != 0;
+
+        /// <summary>Checks the real cursor position, which stays correct during drag and drop.</summary>
+        public static bool IsCursorOver(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero || !GetCursorPos(out var p) || !GetWindowRect(hWnd, out var r)) return false;
+            return p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom;
+        }
+
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
         public const uint SWP_NOSIZE = 0x0001;

@@ -45,6 +45,7 @@ List
 - "Show completed" at the bottom lists finished items. Untick one to restore it.
 
 Drag and drop
+- Drag onto the blue tick and the note opens with a drop area; carry on into the note and let go.
 - Drag an email from Outlook, a PDF (e.g. meeting minutes), a Word file, an image or a text file onto the
   note or the edge icon. Claude lists the actions. Add your name and initials in Settings so it can
   pick out your actions in minutes.

@@ -121,7 +121,8 @@ namespace TodoEdge
                 if (_root.IsMouseOver && !_pressed && !_busy && Mouse.LeftButton == MouseButtonState.Released)
                     _c.ShowPanel(hover: true);
             };
-            _root.DragEnter += (s, e) => Expand();
+            // Dragging something onto the icon opens the note with its drop area showing.
+            _root.DragEnter += (s, e) => { Expand(); _c.ShowPanelForDrop(); };
             _root.DragLeave += (s, e) => _collapseTimer.Start();
             // Always ask for Copy, so Outlook never treats a drop as a move.
             _root.DragOver += (s, e) => { e.Effects = DragDropEffects.Copy; e.Handled = true; };

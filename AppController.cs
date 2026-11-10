@@ -116,6 +116,14 @@ namespace TodoEdge
         public void ShowPanel(bool focusAdd = false, bool hover = false) =>
             _panel.ShowNear(_edge.Handle, _edge.Edge, focusAdd, hover);
 
+        public void ShowPanelForDrop()
+        {
+            if (!_panel.IsVisible) ShowPanel(hover: true);
+            _panel.ShowDropHint();
+        }
+
+        public IntPtr EdgeHandle => _edge.Handle;
+
         public void StartDictation()
         {
             ShowPanel(focusAdd: true);

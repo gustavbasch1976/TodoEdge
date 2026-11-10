@@ -93,10 +93,30 @@ namespace TodoEdge
                 Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => { AddBox.Focus(); Keyboard.Focus(AddBox); }));
         }
 
+        public void ShowDropHint()
+        {
+            DropOverlay.Visibility = Visibility.Visible;
+            _outsideSince = null;
+            _leaveTimer.Start();
+        }
+
         private void LeaveTimer_Tick(object? sender, EventArgs e)
         {
-            if (!IsVisible || !OpenedByHover) { _leaveTimer.Stop(); return; }
-            if (IsMouseOver || _c.IsMouseOverEdge || _c.IsBusy || _dictating)
+            if (!IsVisible) { _leaveTimer.Stop(); return; }
+
+            bool dragging = Native.IsLeftButtonDown;
+            if (!dragging && DropOverlay.Visibility == Visibility.Visible && !_c.IsBusy)
+                DropOverlay.Visibility = Visibility.Collapsed; // drag ended or was cancelled
+
+            if (!OpenedByHover)
+            {
+                if (DropOverlay.Visibility != Visibility.Visible) _leaveTimer.Stop();
+                return;
+            }
+
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            bool over = Native.IsCursorOver(hwnd) || Native.IsCursorOver(_c.EdgeHandle);
+            if (over || dragging || _c.IsBusy || _dictating)
             {
                 _outsideSince = null;
                 return;
@@ -218,7 +238,6 @@ namespace TodoEdge
         {
             e.Effects = DragDropEffects.Copy;
             DropOverlay.Visibility = Visibility.Visible;
-            if (OpenedByHover) OpenedByHover = false; // keep the note open while you aim
             e.Handled = true;
         }
 
