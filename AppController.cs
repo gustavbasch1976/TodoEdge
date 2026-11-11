@@ -28,6 +28,7 @@ namespace TodoEdge
         private WF.NotifyIcon? _tray;
         private HotkeyManager? _hotkeys;
         private DispatcherTimer? _refreshTimer;
+        private DispatcherTimer? _watchdog;
         private bool _busy;
 
         public bool IsMouseOverEdge => _edge != null && _edge.IsMouseOver;
@@ -57,6 +58,13 @@ namespace TodoEdge
             _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
             _refreshTimer.Tick += (s, e) => Store.RefreshAll();
             _refreshTimer.Start();
+
+            // Keep the edge icon on screen through monitor changes, docking and sleep.
+            Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
+            Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            _watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            _watchdog.Tick += (s, e) => _edge.EnsureVisible();
+            _watchdog.Start();
 
             if (string.IsNullOrEmpty(GetApiKey()))
                 Balloon("TodoEdge is running", "Hover over the blue bar at the top of your screen. Add your Claude API key in Settings to read screenshots.");
@@ -151,10 +159,28 @@ namespace TodoEdge
             if (_tray != null) _tray.Text = open == 0 ? "TodoEdge: all done" : $"TodoEdge: {open} to do";
         }
 
+        private void OnDisplayChanged(object? sender, EventArgs e) =>
+            _edge.Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                await Task.Delay(1500); // let Windows finish rearranging the screens
+                _edge.EnsureVisible(forceSnap: true);
+            }));
+
+        private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+        {
+            if (e.Mode != Microsoft.Win32.PowerModes.Resume) return;
+            _edge.Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                await Task.Delay(3000);
+                _edge.EnsureVisible(forceSnap: true);
+            }));
+        }
+
         private void ResetIconPosition()
         {
             Settings.PosX = null;
             Settings.PosY = null;
+            _edge.EnsureVisible();
             _edge.RestorePosition();
         }
 
@@ -399,6 +425,9 @@ namespace TodoEdge
         public void Dispose()
         {
             _refreshTimer?.Stop();
+            _watchdog?.Stop();
+            Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
+            Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             _hotkeys?.Dispose();
             _hotkeys = null;
             if (_tray != null)

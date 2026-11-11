@@ -268,6 +268,26 @@ namespace TodoEdge
 
         // ---------- docking ----------
 
+        /// <summary>
+        /// Brings the icon back if it was hidden, pushed behind other "always on top" windows, or left off-screen
+        /// after a monitor was unplugged, a laptop was docked or undocked, or the PC woke from sleep.
+        /// </summary>
+        public void EnsureVisible(bool forceSnap = false)
+        {
+            if (!IsVisible) Show();
+            if (WindowState != WindowState.Normal) WindowState = WindowState.Normal;
+            Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
+                Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_SHOWWINDOW);
+
+            Native.GetWindowRect(Handle, out var r);
+            var centre = new SD.Point(r.Left + r.Width / 2, r.Top + r.Height / 2);
+            bool onScreen = false;
+            foreach (var screen in WF.Screen.AllScreens)
+                if (screen.Bounds.Contains(centre)) { onScreen = true; break; }
+
+            if (forceSnap || !onScreen) Snap();
+        }
+
         public void RestorePosition()
         {
             var s = _c.Settings;
