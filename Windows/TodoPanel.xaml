@@ -5,22 +5,16 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
         Width="576" SizeToContent="Height"
-        FontFamily="Ink Free, Segoe Print, Segoe UI" FontSize="16" UseLayoutRounding="True">
+        FontFamily="Segoe UI" FontSize="13.5" UseLayoutRounding="True">
 
   <Window.Resources>
-    <!-- Post-it colours. Edit these to restyle the note. -->
-    <SolidColorBrush x:Key="Muted" Color="#7A6A2E"/>
-    <SolidColorBrush x:Key="Ink" Color="#1F2A44"/>
+    <!-- Text colours for the list -->
+    <SolidColorBrush x:Key="Muted" Color="#6B7280"/>
+    <SolidColorBrush x:Key="Ink" Color="#1F2937"/>
   </Window.Resources>
 
-  <Border x:Name="NoteBorder" Margin="12" CornerRadius="3" BorderBrush="#E3CF55" BorderThickness="1"
+  <Border x:Name="NoteBorder" Margin="12" CornerRadius="8" BorderBrush="#D1D5DB" BorderThickness="1" Background="White"
           AllowDrop="True" DragEnter="Note_DragEnter" DragOver="Note_DragOver" DragLeave="Note_DragLeave" Drop="Note_Drop">
-    <Border.Background>
-      <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#FFF9B1" Offset="0"/>
-        <GradientStop Color="#FFF07A" Offset="1"/>
-      </LinearGradientBrush>
-    </Border.Background>
     <Border.Effect>
       <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.22"/>
     </Border.Effect>
@@ -36,8 +30,10 @@
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <!-- Header -->
-      <Grid Grid.Row="0" Margin="14,10,8,4">
+      <!-- Header (VKE charcoal with orange rule) -->
+      <Border Grid.Row="0" Background="{StaticResource Charcoal}" CornerRadius="7,7,0,0"
+              BorderBrush="{StaticResource Accent}" BorderThickness="0,0,0,3" Margin="0,0,0,6">
+      <Grid Margin="14,8,8,8">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
@@ -46,29 +42,33 @@
           <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <TextBlock Text="To-do" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
-          <TextBlock x:Name="CountText" Margin="10,4,0,0" FontSize="18" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+          <TextBlock Text="To-do" FontSize="17" FontWeight="SemiBold" Foreground="White"/>
+          <Border Margin="10,1,0,0" Padding="7,0" CornerRadius="9" Height="18" Background="{StaticResource Accent}"
+                  VerticalAlignment="Center" x:Name="CountBadge">
+            <TextBlock x:Name="CountText" FontSize="11.5" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+          </Border>
         </StackPanel>
-        <Button Grid.Column="1" x:Name="MicButton" Style="{StaticResource IconButton}" Content="&#xE720;" FontSize="15"
+        <Button Grid.Column="1" x:Name="MicButton" Style="{StaticResource HeaderIconButton}" Content="&#xE720;" FontSize="15"
                 ToolTip="Dictate to-dos (Ctrl+Shift+D)" Click="Mic_Click"/>
-        <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE722;"
+        <Button Grid.Column="2" Style="{StaticResource HeaderIconButton}" Content="&#xE722;"
                 ToolTip="Add from screenshot (Ctrl+Shift+T)" Click="Capture_Click"/>
-        <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE77F;"
+        <Button Grid.Column="3" Style="{StaticResource HeaderIconButton}" Content="&#xE77F;"
                 ToolTip="Add from clipboard (Ctrl+Shift+Y)" Click="Clipboard_Click"/>
-        <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE713;"
+        <Button Grid.Column="4" Style="{StaticResource HeaderIconButton}" Content="&#xE713;"
                 ToolTip="Settings" Click="Settings_Click"/>
       </Grid>
+      </Border>
 
       <!-- Busy -->
       <StackPanel Grid.Row="1" x:Name="BusyPanel" Margin="14,0,14,6" Visibility="Collapsed">
-        <TextBlock x:Name="BusyText" Text="Reading screenshot..." Foreground="{StaticResource Muted}" FontSize="15"/>
+        <TextBlock x:Name="BusyText" Text="Reading screenshot..." Foreground="{StaticResource Muted}" FontSize="12"/>
         <ProgressBar IsIndeterminate="True" Height="3" Margin="0,4,0,0" BorderThickness="0"
-                     Foreground="{StaticResource Accent}" Background="#26000000"/>
+                     Foreground="{StaticResource Accent}" Background="#E5E7EB"/>
       </StackPanel>
 
       <!-- Undo -->
       <Border Grid.Row="2" x:Name="UndoBar" Margin="10,0,10,6" Padding="10,6" CornerRadius="6"
-              Background="#111827" Visibility="Collapsed">
+              Background="{StaticResource Charcoal}" Visibility="Collapsed">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -76,7 +76,7 @@
           </Grid.ColumnDefinitions>
           <TextBlock x:Name="UndoText" Foreground="White" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
           <Button Grid.Column="1" Style="{StaticResource LinkButton}" Margin="10,0,0,0" Click="Undo_Click">
-            <TextBlock Text="Undo" Foreground="#93C5FD" FontWeight="SemiBold"/>
+            <TextBlock Text="Undo" Foreground="#F9A66C" FontWeight="SemiBold"/>
           </Button>
         </Grid>
       </Border>
@@ -94,6 +94,15 @@
           </ContextMenu>
         </ScrollViewer.ContextMenu>
         <StackPanel Margin="6,0,6,0">
+          <Grid x:Name="ColumnHeader" Margin="8,0,8,2">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="34"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="PRI" FontSize="10.5" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Left"
+                       ToolTip="Priority: 1 high, 2 medium, 3 low. Click a number to change it."/>
+            <TextBlock Grid.Column="1" Text="TASK" FontSize="10.5" FontWeight="SemiBold" Foreground="#9CA3AF" Margin="30,0,0,0"/>
+          </Grid>
           <TextBlock x:Name="EmptyText" Margin="10,14,10,18" TextWrapping="Wrap" Foreground="{StaticResource Muted}"
                      Text="Nothing to do. Type below, dictate, drop an email or PDF here, or press Ctrl+Shift+T to read a screenshot."/>
           <ItemsControl x:Name="OpenList">
@@ -106,20 +115,29 @@
                   </Border.ContextMenu>
                   <Grid>
                     <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="34"/>
                       <ColumnDefinition Width="Auto"/>
                       <ColumnDefinition Width="Auto"/>
                       <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Border Width="3" CornerRadius="1.5" Margin="0,1,7,1" Background="{Binding TagBrush}"/>
-                    <CheckBox Grid.Column="1" VerticalAlignment="Top" Margin="0,2,10,0" Tag="{Binding}"
+                    <Border Width="24" Height="20" CornerRadius="4" VerticalAlignment="Top" HorizontalAlignment="Left"
+                            Background="{Binding PriorityBrush}" Cursor="Hand" Tag="{Binding}"
+                            MouseLeftButtonDown="Priority_MouseLeftButtonDown"
+                            ToolTip="Priority. Click to change (1 high, 2 medium, 3 low).">
+                      <TextBlock Text="{Binding Priority}" FontSize="12" FontWeight="Bold"
+                                 Foreground="{Binding PriorityForeground}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <Border Grid.Column="1" Width="3" CornerRadius="1.5" Margin="0,1,7,1" Background="{Binding TagBrush}"/>
+                    <CheckBox Grid.Column="2" VerticalAlignment="Top" Margin="0,3,10,0" Tag="{Binding}"
                               Checked="Item_Checked" Cursor="Hand"/>
-                    <StackPanel Grid.Column="2">
-                      <TextBlock x:Name="TitleText" Text="{Binding Title}" TextWrapping="Wrap" FontSize="18" Foreground="{StaticResource Ink}"/>
+                    <StackPanel Grid.Column="3">
+                      <TextBlock x:Name="TitleText" Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" Foreground="{StaticResource Ink}"/>
                       <TextBox x:Name="TitleBox" Text="{Binding Title, UpdateSourceTrigger=Explicit}" TextWrapping="Wrap"
                                Visibility="Collapsed" Tag="{Binding}" Padding="2,1"
                                KeyDown="TitleBox_KeyDown" LostKeyboardFocus="TitleBox_LostKeyboardFocus"
                                IsVisibleChanged="TitleBox_IsVisibleChanged"/>
-                      <TextBlock x:Name="Sub" Text="{Binding Subtitle}" FontSize="14" Margin="0,2,0,0"
+                      <TextBlock x:Name="Sub" Text="{Binding Subtitle}" FontSize="12" Margin="0,2,0,0"
                                  Foreground="{StaticResource Muted}"
                                  Visibility="{Binding HasSubtitle, Converter={StaticResource BoolVis}}"/>
                     </StackPanel>
@@ -127,7 +145,7 @@
                 </Border>
                 <DataTemplate.Triggers>
                   <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
-                    <Setter TargetName="Row" Property="Background" Value="#14000000"/>
+                    <Setter TargetName="Row" Property="Background" Value="#FFF4ED"/>
                   </Trigger>
                   <DataTrigger Binding="{Binding IsEditing}" Value="True">
                     <Setter TargetName="TitleText" Property="Visibility" Value="Collapsed"/>
@@ -146,7 +164,7 @@
       <!-- Completed toggle -->
       <Button Grid.Row="4" x:Name="DoneToggle" Style="{StaticResource LinkButton}" HorizontalAlignment="Left"
               Margin="16,6,0,2" Click="DoneToggle_Click">
-        <TextBlock x:Name="DoneToggleText" Text="Show completed" FontSize="15" Foreground="{StaticResource Muted}"/>
+        <TextBlock x:Name="DoneToggleText" Text="Show completed" FontSize="12" Foreground="{StaticResource Muted}"/>
       </Button>
 
       <!-- Completed items -->
@@ -166,8 +184,8 @@
                   </Grid.ColumnDefinitions>
                   <CheckBox IsChecked="True" Margin="10,2,10,0" VerticalAlignment="Top" Tag="{Binding}"
                             Unchecked="DoneItem_Unchecked" Cursor="Hand" ToolTip="Restore"/>
-                  <TextBlock Grid.Column="1" Text="{Binding Title}" TextWrapping="Wrap" Foreground="#9C8B4E"
-                             FontSize="16" TextDecorations="Strikethrough"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Title}" TextWrapping="Wrap" Foreground="#9CA3AF"
+                             FontSize="13.5" TextDecorations="Strikethrough"/>
                 </Grid>
               </Border>
             </DataTemplate>
@@ -181,9 +199,9 @@
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <Border x:Name="AddBorder" CornerRadius="4" BorderBrush="#D9C65A" BorderThickness="1" Padding="8,6" Background="#FFFDE8">
+        <Border x:Name="AddBorder" CornerRadius="6" BorderBrush="#D1D5DB" BorderThickness="1" Padding="8,6" Background="White">
           <Grid>
-            <TextBlock x:Name="AddPlaceholder" Text="Add a to-do, or Ctrl+Enter to let Claude sort it" Foreground="#9CA3AF"
+            <TextBlock x:Name="AddPlaceholder" Text="Add a to-do (start with !1 for high priority), or Ctrl+Enter for Claude" Foreground="#9CA3AF"
                        IsHitTestVisible="False" VerticalAlignment="Center"/>
             <TextBox x:Name="AddBox" BorderThickness="0" Background="Transparent" Padding="0"
                      VerticalAlignment="Center" KeyDown="AddBox_KeyDown" TextChanged="AddBox_TextChanged"/>
@@ -195,14 +213,14 @@
 
       <!-- Shown while dragging a file over the note -->
       <Grid Grid.RowSpan="7" x:Name="DropOverlay" Visibility="Collapsed" IsHitTestVisible="False">
-        <Rectangle Margin="8" RadiusX="4" RadiusY="4" Fill="#E6FFF59D" Stroke="#2563EB" StrokeThickness="2"
+        <Rectangle Margin="8" RadiusX="4" RadiusY="4" Fill="#F2FFFFFF" Stroke="#F26F21" StrokeThickness="2"
                    StrokeDashArray="5 3"/>
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="30" Foreground="#2563EB"
+          <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="30" Foreground="#F26F21"
                      HorizontalAlignment="Center"/>
-          <TextBlock Text="Drop to turn it into to-dos" FontSize="22" Foreground="{StaticResource Ink}"
+          <TextBlock Text="Drop to turn it into to-dos" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Ink}"
                      HorizontalAlignment="Center" Margin="0,6,0,0"/>
-          <TextBlock Text="Emails, PDFs, Word files, images, text" FontSize="15" Foreground="{StaticResource Muted}"
+          <TextBlock Text="Emails, PDFs, Word files, images, text" FontSize="12.5" Foreground="{StaticResource Muted}"
                      HorizontalAlignment="Center"/>
         </StackPanel>
       </Grid>

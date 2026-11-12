@@ -36,7 +36,7 @@ namespace TodoEdge
 
             _dim.Fill = new SolidColorBrush(Color.FromArgb(0x70, 0, 0, 0));
             _dim.IsHitTestVisible = false;
-            _frame.Stroke = new SolidColorBrush(Color.FromRgb(0x3B, 0x82, 0xF6));
+            _frame.Stroke = new SolidColorBrush(Color.FromRgb(0xF2, 0x6F, 0x21));
             _frame.StrokeThickness = 2;
             _frame.Visibility = Visibility.Collapsed;
             _frame.IsHitTestVisible = false;

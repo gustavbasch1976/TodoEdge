@@ -16,6 +16,8 @@ namespace TodoEdge
         public string? Person { get; set; }
         public string? Notes { get; set; }
         public string Tag { get; set; } = NoTag;
+        public int PriorityIndex { get; set; } = 1; // 0 = 1 high, 1 = 2 medium, 2 = 3 low
+        public List<string> PriorityOptions { get; } = new List<string> { "1 High", "2 Medium", "3 Low" };
         public List<string> TagOptions { get; set; } = new List<string>();
 
         public string Info
@@ -61,6 +63,7 @@ namespace TodoEdge
                 DueText = t.Due?.ToString("dd/MM/yyyy") ?? "",
                 Person = t.Person,
                 Notes = t.Notes,
+                PriorityIndex = t.Priority - 1,
                 TagOptions = options
             }).ToList();
 

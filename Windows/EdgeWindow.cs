@@ -30,7 +30,7 @@ namespace TodoEdge
         private readonly DispatcherTimer _collapseTimer;
         private readonly DispatcherTimer _hoverOpenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
 
-        private static readonly Color AccentColour = Color.FromRgb(0x25, 0x63, 0xEB);
+        private static readonly Color AccentColour = Color.FromRgb(0xF2, 0x6F, 0x21); // VKE orange
         private static readonly Color AlertColour = Color.FromRgb(0xDC, 0x26, 0x26);
 
         private bool _pressed, _dragged, _panelOpen, _busy, _expanded;
@@ -95,7 +95,7 @@ namespace TodoEdge
             _bubble.Width = 44;
             _bubble.Height = 44;
             _bubble.CornerRadius = new CornerRadius(22);
-            _bubble.Background = new LinearGradientBrush(Color.FromRgb(0x3B, 0x82, 0xF6), AccentColour, 90);
+            _bubble.Background = new LinearGradientBrush(Color.FromRgb(0xF7, 0x92, 0x4F), AccentColour, 90);
             _bubble.Child = bubbleContent;
             _bubble.Cursor = Cursors.Hand;
             _bubble.Effect = new DropShadowEffect { BlurRadius = 10, ShadowDepth = 1.5, Opacity = 0.35 };
@@ -227,7 +227,7 @@ namespace TodoEdge
         {
             _badge.Visibility = openCount > 0 ? Visibility.Visible : Visibility.Collapsed;
             _badgeText.Text = openCount > 99 ? "99+" : openCount.ToString();
-            _badge.Background = new SolidColorBrush(anyOverdue ? AlertColour : Color.FromRgb(0x11, 0x18, 0x27));
+            _badge.Background = new SolidColorBrush(anyOverdue ? AlertColour : Color.FromRgb(0x2B, 0x2B, 0x2B));
             _bar.Background = new SolidColorBrush(anyOverdue ? AlertColour : AccentColour);
         }
 

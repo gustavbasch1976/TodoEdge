@@ -157,7 +157,9 @@ namespace TodoEdge
         private void Refresh()
         {
             int open = _c.Store.Open.Count;
-            CountText.Text = open == 0 ? "" : open.ToString();
+            CountText.Text = open.ToString();
+            CountBadge.Visibility = open == 0 ? Visibility.Collapsed : Visibility.Visible;
+            ColumnHeader.Visibility = open == 0 ? Visibility.Collapsed : Visibility.Visible;
             EmptyText.Visibility = open == 0 ? Visibility.Visible : Visibility.Collapsed;
             int done = _c.Store.Done.Count;
             DoneToggle.Visibility = done > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -297,9 +299,9 @@ namespace TodoEdge
             if (!_dictating) return;
             _dictating = false;
             _dictationTimeout.Stop();
-            MicButton.ClearValue(ForegroundProperty);
-            AddBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD9, 0xC6, 0x5A));
-            AddPlaceholder.Text = "Add a to-do, or Ctrl+Enter to let Claude sort it";
+            MicButton.Foreground = System.Windows.Media.Brushes.White;
+            AddBorder.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD1, 0xD5, 0xDB));
+            AddPlaceholder.Text = "Add a to-do (start with !1 for high priority), or Ctrl+Enter for Claude";
             if (closeVoiceTyping && AddBox.IsKeyboardFocused) Native.ToggleVoiceTyping();
         }
 
@@ -307,7 +309,15 @@ namespace TodoEdge
         {
             string text = AddBox.Text.Trim();
             if (text.Length == 0) return;
-            _c.Store.Add(new TodoItem { Title = text });
+            int priority = 2;
+            // "!1 Call Jason" adds at priority 1 (also !2, !3).
+            if (text.Length > 2 && text[0] == '!' && text[1] >= '1' && text[1] <= '3')
+            {
+                priority = text[1] - '0';
+                text = text.Substring(2).Trim();
+                if (text.Length == 0) return;
+            }
+            _c.Store.Add(new TodoItem { Title = text, Priority = priority });
             AddBox.Clear();
             ListScroll.ScrollToEnd();
         }
@@ -440,6 +450,16 @@ namespace TodoEdge
             foreach (var i in _c.Store.Open.Where(i => i.IsEditing).ToList()) i.IsEditing = false;
         }
 
+        // ---------- priority ----------
+
+        private void Priority_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is not TodoItem item) return;
+            item.Priority = item.Priority >= 3 ? 1 : item.Priority + 1; // 1 -> 2 -> 3 -> 1
+            _c.Store.Save(); // re-sorts the list
+            e.Handled = true;
+        }
+
         // ---------- per-item menu ----------
 
         private void Row_ContextMenuOpening(object sender, ContextMenuEventArgs e)
@@ -452,6 +472,16 @@ namespace TodoEdge
             if (isOpen)
             {
                 menu.Items.Add(Item("Edit", () => { CommitAllEdits(); item.IsEditing = true; }));
+
+                var pri = new MenuItem { Header = "Priority" };
+                foreach (var (n, label) in new[] { (1, "1  High"), (2, "2  Medium"), (3, "3  Low") })
+                {
+                    int value = n;
+                    var mi = Item(label, () => { item.Priority = value; _c.Store.Save(); });
+                    mi.IsChecked = item.Priority == value;
+                    pri.Items.Add(mi);
+                }
+                menu.Items.Add(pri);
 
                 var due = new MenuItem { Header = "Due date" };
                 due.Items.Add(Item("Today", () => SetDue(item, DateTime.Today)));
@@ -474,7 +504,7 @@ namespace TodoEdge
                 tag.Items.Add(Item("No tag", () => { item.Tag = null; _c.Store.Save(); }));
                 menu.Items.Add(tag);
 
-                menu.Items.Add(Item("Move to top", () => _c.Store.MoveToTop(item)));
+                menu.Items.Add(Item("Move to top of its priority", () => _c.Store.MoveToTop(item)));
             }
             else
             {

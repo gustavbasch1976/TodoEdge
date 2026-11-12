@@ -305,7 +305,7 @@ namespace TodoEdge
             if (input.Kind == "dictation" && tasks.Count == 1)
             {
                 var t = tasks[0];
-                Store.Add(new TodoItem { Title = t.Title, Due = t.Due, Person = t.Person, Notes = t.Notes, SourceText = shortText });
+                Store.Add(new TodoItem { Title = t.Title, Due = t.Due, Person = t.Person, Notes = t.Notes, Priority = t.Priority, SourceText = shortText });
                 ShowPanel();
                 return;
             }
@@ -333,6 +333,7 @@ namespace TodoEdge
                     Person = r.Person,
                     Notes = r.Notes,
                     Tag = r.Tag == ReviewItem.NoTag ? null : r.Tag,
+                    Priority = r.PriorityIndex + 1,
                     SourceImage = sourceFile,
                     SourceText = sourceFile == null ? shortText : null
                 });

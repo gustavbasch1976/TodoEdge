@@ -15,6 +15,7 @@ namespace TodoEdge
         public DateTime? Due { get; set; }
         public string? Person { get; set; }
         public string? Notes { get; set; }
+        public int Priority { get; set; } = 2;
     }
 
     /// <summary>Sends a screenshot or text to the Claude Messages API and returns the to-do items it finds.</summary>
@@ -40,10 +41,12 @@ Rules:
 - due: a date in yyyy-MM-dd only if a deadline is stated or clearly implied (resolve ""Friday"", ""tomorrow"", ""end of the week"" against today), otherwise null.
 - person: the main person involved (first name or name as shown), otherwise null.
 - notes: one short line of useful context (reference numbers, what is needed), otherwise null.
+- priority: 1 = high (urgent, due within 2 working days, client or safety critical, or flagged as important),
+  2 = medium (normal work), 3 = low (no deadline, nice to have, for information).
 - If there is no action for the reader, return an empty list.
 
 Respond with JSON only, no other text, in exactly this shape:
-{{""tasks"":[{{""title"":""..."",""due"":""yyyy-MM-dd or null"",""person"":""... or null"",""notes"":""... or null""}}]}}";
+{{""tasks"":[{{""title"":""..."",""due"":""yyyy-MM-dd or null"",""person"":""... or null"",""notes"":""... or null"",""priority"":2}}]}}";
         }
 
         public static async Task<List<ProposedTask>> ExtractAsync(string apiKey, string model, CaptureInput input, string? myName)
@@ -186,7 +189,15 @@ Respond with JSON only, no other text, in exactly this shape:
                     DateTimeStyles.None, out var d))
                 due = d;
 
-            return new ProposedTask { Title = title.Trim(), Due = due, Person = Str(t, "person"), Notes = Str(t, "notes") };
+            int priority = 2;
+            if (t.TryGetProperty("priority", out var p))
+            {
+                if (p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out int n)) priority = n;
+                else if (p.ValueKind == JsonValueKind.String && int.TryParse(p.GetString(), out int m)) priority = m;
+            }
+            priority = Math.Max(1, Math.Min(3, priority));
+
+            return new ProposedTask { Title = title.Trim(), Due = due, Person = Str(t, "person"), Notes = Str(t, "notes"), Priority = priority };
         }
 
         private static string? Str(JsonElement e, string name)

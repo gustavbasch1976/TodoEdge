@@ -3,7 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
   <Application.Resources>
-    <SolidColorBrush x:Key="Accent" Color="#2563EB"/>
+    <!-- VKE colours: change these two to restyle the whole app -->
+    <Color x:Key="VkeOrangeColour">#F26F21</Color>
+    <Color x:Key="VkeCharcoalColour">#2B2B2B</Color>
+    <SolidColorBrush x:Key="Accent" Color="#F26F21"/>
+    <SolidColorBrush x:Key="Charcoal" Color="#2B2B2B"/>
     <SolidColorBrush x:Key="Muted" Color="#6B7280"/>
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
     <BooleanToVisibilityConverter x:Key="BoolVis"/>
@@ -32,6 +36,24 @@
       </Setter>
     </Style>
 
+    <Style x:Key="HeaderIconButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="b" Background="Transparent" CornerRadius="6">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="b" Property="Background" Value="#33FFFFFF"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <Style x:Key="AddButton" TargetType="Button">
       <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
       <Setter Property="FontSize" Value="13"/>
@@ -42,12 +64,12 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="b" Background="#2563EB" CornerRadius="16">
+            <Border x:Name="b" Background="#F26F21" CornerRadius="16">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="b" Property="Background" Value="#1D4ED8"/>
+                <Setter TargetName="b" Property="Background" Value="#D65A12"/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -62,12 +84,12 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="b" Background="#2563EB" CornerRadius="6" Padding="{TemplateBinding Padding}">
+            <Border x:Name="b" Background="#F26F21" CornerRadius="6" Padding="{TemplateBinding Padding}">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="b" Property="Background" Value="#1D4ED8"/>
+                <Setter TargetName="b" Property="Background" Value="#D65A12"/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -96,7 +118,7 @@
     </Style>
 
     <Style x:Key="LinkButton" TargetType="Button">
-      <Setter Property="Foreground" Value="#2563EB"/>
+      <Setter Property="Foreground" Value="#F26F21"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template">
         <Setter.Value>

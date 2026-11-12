@@ -18,6 +18,7 @@ namespace TodoEdge
         private DateTime? _due;
         private string? _tag;
         private bool _isEditing;
+        private int _priority = 2;
 
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
@@ -46,6 +47,30 @@ namespace TodoEdge
             get => _tag;
             set { _tag = string.IsNullOrWhiteSpace(value) ? null : value; OnChanged(); OnChanged(nameof(TagBrush)); Refresh(); }
         }
+
+        /// <summary>1 = high, 2 = medium, 3 = low. The list is always sorted by this.</summary>
+        public int Priority
+        {
+            get => _priority;
+            set
+            {
+                _priority = Math.Max(1, Math.Min(3, value == 0 ? 2 : value));
+                OnChanged();
+                OnChanged(nameof(PriorityBrush));
+                OnChanged(nameof(PriorityForeground));
+            }
+        }
+
+        [JsonIgnore]
+        public Brush PriorityBrush => Priority switch
+        {
+            1 => PriorityColours.High,
+            2 => PriorityColours.Medium,
+            _ => PriorityColours.Low
+        };
+
+        [JsonIgnore]
+        public Brush PriorityForeground => Priority == 3 ? PriorityColours.LowText : Brushes.White;
 
         public string? SourceText { get; set; }
         public string? SourceImage { get; set; }
@@ -104,6 +129,21 @@ namespace TodoEdge
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    internal static class PriorityColours
+    {
+        public static readonly Brush High = Make(0xF2, 0x6F, 0x21);    // VKE orange
+        public static readonly Brush Medium = Make(0x2B, 0x2B, 0x2B);  // VKE charcoal
+        public static readonly Brush Low = Make(0xE5, 0xE7, 0xEB);     // light grey
+        public static readonly Brush LowText = Make(0x4B, 0x55, 0x63);
+
+        private static Brush Make(byte r, byte g, byte b)
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            brush.Freeze();
+            return brush;
+        }
+    }
+
     internal static class TagPalette
     {
         private static readonly Color[] Colours =
@@ -157,6 +197,7 @@ namespace TodoEdge
                 if (model == null) return;
                 foreach (var i in model.Open) Open.Add(i);
                 foreach (var i in model.Done) Done.Add(i);
+                SortOpen();
             }
             catch
             {
@@ -165,8 +206,22 @@ namespace TodoEdge
             }
         }
 
+        /// <summary>Priority 1 first, then 2, then 3. Keeps your own order within each priority.</summary>
+        public void SortOpen()
+        {
+            var sorted = Open.Select((item, index) => (item, index))
+                .OrderBy(p => p.item.Priority).ThenBy(p => p.index)
+                .Select(p => p.item).ToList();
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                int current = Open.IndexOf(sorted[i]);
+                if (current != i) Open.Move(current, i);
+            }
+        }
+
         public void Save()
         {
+            SortOpen();
             Paths.Ensure();
             var model = new FileModel { Open = Open.ToList(), Done = Done.ToList() };
             Paths.WriteAllTextSafe(Paths.TasksFile, JsonSerializer.Serialize(model, JsonOptions));

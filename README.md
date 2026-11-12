@@ -38,6 +38,9 @@ List
 - Microphone button or Ctrl+Shift+D: dictate. Windows voice typing opens; speak, then press Enter.
   Claude tidies it into to-dos, e.g. "call Jason tomorrow and finish the report by Friday" becomes two
   dated items. Voice typing needs a microphone and, on Windows 10, online speech recognition turned on.
+- Priority column: 1 (orange, high), 2 (charcoal, medium), 3 (grey, low). Click the number to change it,
+  or right-click > Priority. The list always sorts 1 first. Claude suggests a priority for items it finds.
+  Type "!1 Call Jason" to add straight in at priority 1.
 - Tick a checkbox to complete an item. An Undo bar shows for 6 seconds.
 - Double-click an item to edit it.
 - Right-click an item: due date, tag, move to top, show source, delete.
