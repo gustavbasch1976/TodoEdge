@@ -77,21 +77,62 @@ namespace TodoEdge
                 asyncInfo += ", error " + ex.Message;
             }
 
+            if (!started)
+            {
+                // Ordinary source: the file is available right now, during the drop.
+                try
+                {
+                    var files = ReadHDrop(com);
+                    if (files.Count > 0) return files;
+                    throw new Exception("file list was empty or files did not exist [" + asyncInfo + "]");
+                }
+                catch (COMException ex)
+                {
+                    throw new Exception(ex.Message + " [" + asyncInfo + "]");
+                }
+            }
+
+            // Async source (new Outlook, Chrome, Edge): do what File Explorer does. Let the drop finish, then
+            // collect the file on a separate background (MTA) thread, which may block while the source prepares it.
+            Guid iid = IID_IDataObject;
+            Marshal.ThrowExceptionForHR(CoMarshalInterThreadInterfaceInStream(ref iid, com, out IntPtr stream));
+            status?.Invoke("Getting the email from Outlook...");
+
             int hr = 0;
-            DateTime begin = DateTime.Now;
-            int attempts = 0;
-            string lastError = "";
             try
             {
-                // The first attempt runs during the drop itself. In async mode the source stays available after the
-                // drop, so keep asking while it finishes writing the file (large emails and attachments take time).
-                DateTime deadline = begin.AddSeconds(45);
+                return await RunOnMtaThread(() => CollectInBackground(stream, asyncInfo));
+            }
+            catch (Exception ex)
+            {
+                hr = ex.HResult == 0 ? DV_E_FORMATETC : ex.HResult;
+                throw;
+            }
+            finally
+            {
+                try { async!.EndOperation(hr, IntPtr.Zero, 1 /* DROPEFFECT_COPY */); } catch { }
+            }
+        }
+
+        private static List<(string Name, byte[] Bytes)> CollectInBackground(IntPtr stream, string asyncInfo)
+        {
+            CoInitializeEx(IntPtr.Zero, COINIT_MULTITHREADED);
+            object? obj = null;
+            try
+            {
+                Guid iid = IID_IDataObject;
+                Marshal.ThrowExceptionForHR(CoGetInterfaceAndReleaseStream(stream, ref iid, out obj));
+                var com = (ComDataObject)obj;
+
+                DateTime begin = DateTime.Now, deadline = begin.AddSeconds(60);
+                int attempts = 0;
+                string lastError = "";
                 while (true)
                 {
                     attempts++;
                     try
                     {
-                        var files = ReadHDrop(com);
+                        var files = ReadHDrop(com); // may block while the source writes the file
                         if (files.Count > 0) return files;
                         lastError = "file list was empty or files did not exist";
                     }
@@ -100,23 +141,31 @@ namespace TodoEdge
                         lastError = ex.Message;
                     }
 
-                    if (!started || DateTime.Now > deadline)
-                    {
-                        hr = DV_E_FORMATETC;
-                        throw new Exception($"{lastError} [{asyncInfo}; {attempts} attempt(s) over " +
+                    if (DateTime.Now > deadline)
+                        throw new Exception($"{lastError} [{asyncInfo}; background thread; {attempts} attempt(s) over " +
                                             $"{(DateTime.Now - begin).TotalSeconds:0} s]");
-                    }
-                    if (attempts == 1) status?.Invoke("Waiting for Outlook to hand over the email...");
-                    await Task.Delay(500);
+                    System.Threading.Thread.Sleep(500);
                 }
             }
             finally
             {
-                if (started)
-                {
-                    try { async!.EndOperation(hr, IntPtr.Zero, 1 /* DROPEFFECT_COPY */); } catch { }
-                }
+                if (obj != null) Marshal.ReleaseComObject(obj);
+                CoUninitialize();
             }
+        }
+
+        private static Task<T> RunOnMtaThread<T>(Func<T> work)
+        {
+            var tcs = new TaskCompletionSource<T>();
+            var thread = new System.Threading.Thread(() =>
+            {
+                try { tcs.SetResult(work()); }
+                catch (Exception ex) { tcs.SetException(ex); }
+            });
+            thread.IsBackground = true;
+            thread.SetApartmentState(System.Threading.ApartmentState.MTA);
+            thread.Start();
+            return tcs.Task;
         }
 
         /// <summary>
@@ -390,6 +439,22 @@ namespace TodoEdge
         // ---------- interop ----------
 
         private const short CF_HDROP = 15;
+        private const uint COINIT_MULTITHREADED = 0x0;
+        private static readonly Guid IID_IDataObject = new Guid("0000010e-0000-0000-C000-000000000046");
+
+        [DllImport("ole32.dll")]
+        private static extern int CoMarshalInterThreadInterfaceInStream(ref Guid riid,
+            [MarshalAs(UnmanagedType.IUnknown)] object pUnk, out IntPtr ppStm);
+
+        [DllImport("ole32.dll")]
+        private static extern int CoGetInterfaceAndReleaseStream(IntPtr pStm, ref Guid riid,
+            [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+
+        [DllImport("ole32.dll")]
+        private static extern int CoInitializeEx(IntPtr pvReserved, uint dwCoInit);
+
+        [DllImport("ole32.dll")]
+        private static extern void CoUninitialize();
         private const int DV_E_FORMATETC = unchecked((int)0x80040064);
         private const uint STGM_CREATE = 0x00001000;
 
